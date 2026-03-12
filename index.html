@@ -1,0 +1,1126 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Locos x la Pizza</title>
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#C0392B">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Locos x la Pizza">
+    <link rel="apple-touch-icon" href="/icon-192.png">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #C0392B;
+            --bg-dark: #1a1a1a;
+            --bg-panel: #2a2a2a;
+            --text-light: #ffffff;
+            --text-muted: #aaaaaa;
+            --success: #27ae60;
+            --warning: #f39c12;
+            --danger: #e74c3c;
+            --border: #333333;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Poppins', sans-serif; }
+        body { background-color: var(--bg-dark); color: var(--text-light); display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+        header { background-color: var(--primary); padding: 15px 20px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 4px 6px rgba(0,0,0,0.3); z-index: 10; }
+        h1 { font-size: 28px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; font-style: italic; text-shadow: 2px 2px 4px rgba(0,0,0,0.5); }
+        nav button { background: none; border: none; color: white; font-size: 16px; margin-left: 20px; cursor: pointer; opacity: 0.7; transition: 0.3s; font-weight: 600; }
+        nav button.active, nav button:hover { opacity: 1; text-shadow: 0 0 10px rgba(255,255,255,0.5); }
+        .container { flex: 1; display: flex; overflow: hidden; }
+        .section { display: none; width: 100%; height: 100%; overflow-y: auto; padding: 20px; }
+        .section.active { display: flex; }
+        
+        /* CAJA */
+        #caja { flex-direction: row; gap: 20px; }
+        .left-panel, .right-panel { background: var(--bg-panel); border-radius: 10px; padding: 20px; display: flex; flex-direction: column; }
+        .left-panel { flex: 2; overflow-y: auto; }
+        .right-panel { flex: 1; min-width: 350px; border-left: 1px solid var(--border); }
+        
+        .step-title { font-size: 20px; margin-bottom: 15px; color: var(--primary); font-weight: 600; }
+        .grid-buttons { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 15px; margin-bottom: 20px; }
+        .btn { background: #333; color: white; border: 2px solid transparent; padding: 15px; border-radius: 8px; cursor: pointer; font-size: 16px; transition: 0.2s; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
+        .btn:hover { background: #444; transform: translateY(-2px); }
+        .btn.selected { border-color: var(--primary); background: rgba(192, 57, 43, 0.2); }
+        .btn-large { font-size: 20px; padding: 25px; }
+        .price-tag { font-size: 14px; color: var(--text-muted); margin-top: 5px; }
+        
+        .quantity-selector { display: flex; align-items: center; justify-content: center; gap: 20px; margin: 20px 0; }
+        .qty-btn { background: #444; border: none; color: white; width: 40px; height: 40px; border-radius: 50%; font-size: 20px; cursor: pointer; }
+        .qty-display { font-size: 24px; font-weight: bold; width: 40px; text-align: center; }
+        
+        .btn-action { background: var(--primary); color: white; border: none; padding: 20px; border-radius: 8px; font-size: 24px; font-weight: bold; cursor: pointer; width: 100%; transition: 0.2s; margin-top: auto; text-transform: uppercase; letter-spacing: 1px; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
+        .btn-action:hover { background: #a93226; }
+        .btn-action:disabled { background: #555; cursor: not-allowed; }
+        
+        /* ORDER SUMMARY */
+        .order-items { flex: 1; overflow-y: auto; margin-bottom: 20px; border-bottom: 1px solid var(--border); padding-bottom: 10px; }
+        .order-item { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid #333; }
+        .item-info { flex: 1; }
+        .item-title { font-weight: 600; }
+        .item-desc { font-size: 12px; color: var(--text-muted); }
+        .item-price { font-weight: bold; margin: 0 15px; }
+        .btn-delete { background: none; border: none; color: var(--danger); cursor: pointer; font-size: 18px; padding: 5px; }
+        
+        .total-display { font-size: 32px; font-weight: bold; text-align: right; margin-bottom: 20px; }
+        .payment-methods { display: flex; gap: 10px; margin-bottom: 20px; }
+        .pay-btn { flex: 1; padding: 10px; background: #333; border: 1px solid #444; color: white; border-radius: 5px; cursor: pointer; }
+        .pay-btn.selected { background: var(--primary); border-color: var(--primary); }
+        
+        .cash-input { display: none; margin-bottom: 20px; }
+        .cash-input.active { display: block; }
+        .cash-input input { width: 100%; padding: 10px; background: #333; border: 1px solid #444; color: white; border-radius: 5px; font-size: 18px; margin-bottom: 10px; }
+        .change-display { font-size: 24px; color: var(--success); font-weight: bold; text-align: right; }
+        
+        /* MODALS */
+        .modal-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.8); z-index: 100; justify-content: center; align-items: center; }
+        .modal-overlay.active { display: flex; }
+        .modal-content { background: white; color: black; padding: 30px; border-radius: 10px; width: 400px; max-width: 90%; max-height: 90vh; overflow-y: auto; }
+        .modal-content.dark { background: var(--bg-panel); color: white; width: 600px; }
+        .ticket-header { text-align: center; margin-bottom: 20px; border-bottom: 2px dashed #ccc; padding-bottom: 10px; }
+        .ticket-item { display: flex; justify-content: space-between; margin-bottom: 5px; font-size: 14px; }
+        .ticket-total { display: flex; justify-content: space-between; font-weight: bold; font-size: 20px; margin-top: 15px; border-top: 2px dashed #ccc; padding-top: 10px; }
+        
+        @media print {
+            body * { visibility: hidden; }
+            #ticket-modal, #ticket-modal * { visibility: visible; }
+            #ticket-modal { position: absolute; left: 0; top: 0; background: white; color: black; width: 100%; height: 100%; align-items: flex-start; justify-content: flex-start; }
+            .modal-content { width: 100%; max-width: 100%; box-shadow: none; padding: 0; }
+            .btn-action { display: none !important; }
+            * { font-size: 14px !important; color: black !important; text-shadow: none !important; }
+            .ticket-header h2 { font-size: 18px !important; font-style: normal !important; }
+        }
+        
+        /* HISTORIAL & REPORTES */
+        .list-container { display: flex; flex-direction: column; gap: 10px; }
+        .history-card { background: var(--bg-panel); padding: 15px; border-radius: 8px; display: flex; justify-content: space-between; align-items: center; cursor: pointer; }
+        .history-card:hover { background: #333; }
+        .history-details { display: none; margin-top: 10px; padding-top: 10px; border-top: 1px solid #444; font-size: 14px; }
+        .history-card.expanded .history-details { display: block; }
+        
+        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin-bottom: 30px; }
+        .stat-card { background: var(--bg-panel); padding: 20px; border-radius: 8px; text-align: center; }
+        .stat-value { font-size: 28px; font-weight: bold; color: var(--primary); margin-top: 10px; }
+        
+        .chart-container { height: 200px; display: flex; align-items: flex-end; gap: 10px; padding-top: 20px; border-bottom: 1px solid #444; margin-top: 20px; }
+        .bar { background: var(--primary); width: 100%; border-radius: 4px 4px 0 0; position: relative; transition: height 0.5s; }
+        .bar span { position: absolute; top: -25px; left: 50%; transform: translateX(-50%); font-size: 12px; }
+        .bar-label { text-align: center; font-size: 12px; margin-top: 5px; }
+        
+        .empanada-split { display: flex; flex-direction: column; gap: 15px; margin: 20px 0; }
+        .split-row { display: flex; justify-content: space-between; align-items: center; background: #333; padding: 10px 20px; border-radius: 8px; }
+        .split-status { text-align: center; font-size: 18px; font-weight: bold; margin-top: 10px; }
+        
+        /* SETTINGS */
+        .settings-group { margin-bottom: 20px; }
+        .settings-group label { display: block; margin-bottom: 5px; color: var(--text-muted); }
+        .settings-group input { width: 100%; padding: 8px; background: #333; border: 1px solid #555; color: white; border-radius: 4px; }
+        
+        @media (max-width: 768px) {
+            #caja { flex-direction: column; }
+            .right-panel { border-left: none; border-top: 1px solid var(--border); }
+        }
+    </style>
+</head>
+<body>
+
+<header>
+    <h1>🍕 Locos x la Pizza</h1>
+    <nav>
+        <button id="installBtn" style="display: none; border: 1px solid white; border-radius: 4px; padding: 5px 10px;">📲 Instalar App</button>
+        <button class="active" onclick="switchTab('caja', this)">Caja</button>
+        <button onclick="switchTab('historial', this)">Historial</button>
+        <button onclick="switchTab('reportes', this)">Reportes</button>
+        <button onclick="openSettings()">⚙️</button>
+    </nav>
+</header>
+
+<div class="container">
+    <!-- CAJA SECTION -->
+    <div id="caja" class="section active">
+        <div class="left-panel" id="flow-container">
+            <!-- Flow content injected via JS -->
+        </div>
+        <div class="right-panel">
+            <h2 class="step-title">Orden Actual</h2>
+            <div class="order-items" id="order-items"></div>
+            <div class="total-display">Total: $<span id="order-total">0</span></div>
+            
+            <div class="payment-methods" id="payment-methods">
+                <button class="pay-btn selected" onclick="setPayment('Efectivo', this)">💵 Efectivo</button>
+                <button class="pay-btn" onclick="setPayment('Transferencia', this)">📱 Transf.</button>
+                <button class="pay-btn" onclick="setPayment('Tarjeta', this)">💳 Tarjeta</button>
+            </div>
+            
+            <div class="cash-input active" id="cash-input-container">
+                <input type="number" id="cash-received" placeholder="Monto recibido $" oninput="calculateChange()">
+                <div class="change-display" id="change-display">Vuelto: $0</div>
+            </div>
+            
+            <button class="btn-action" id="btn-cobrar" onclick="processPayment()" disabled>COBRAR</button>
+        </div>
+    </div>
+
+    <!-- HISTORIAL SECTION -->
+    <div id="historial" class="section" style="display: none; flex-direction: column;">
+        <h2 class="step-title">Historial de Ventas</h2>
+        <div style="margin-bottom: 20px; display: flex; gap: 10px;">
+            <select id="hist-filter-date" style="padding: 8px; background: #333; color: white; border: 1px solid #555; border-radius: 4px;" onchange="renderHistory()">
+                <option value="all">Todas las fechas</option>
+                <option value="today">Hoy</option>
+            </select>
+            <select id="hist-filter-pay" style="padding: 8px; background: #333; color: white; border: 1px solid #555; border-radius: 4px;" onchange="renderHistory()">
+                <option value="all">Todos los pagos</option>
+                <option value="Efectivo">Efectivo</option>
+                <option value="Transferencia">Transferencia</option>
+                <option value="Tarjeta">Tarjeta</option>
+            </select>
+        </div>
+        <div class="list-container" id="history-list"></div>
+    </div>
+
+    <!-- REPORTES SECTION -->
+    <div id="reportes" class="section" style="display: none; flex-direction: column;">
+        <h2 class="step-title">Reportes</h2>
+        <div style="margin-bottom: 20px;">
+            <select id="rep-filter-date" style="padding: 8px; background: #333; color: white; border: 1px solid #555; border-radius: 4px;" onchange="renderReports()">
+                <option value="today">Hoy</option>
+                <option value="week">Esta semana</option>
+                <option value="month">Este mes</option>
+                <option value="all">Todo histórico</option>
+            </select>
+        </div>
+        
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div>Total Recaudado</div>
+                <div class="stat-value" id="rep-total">$0</div>
+            </div>
+            <div class="stat-card">
+                <div>Órdenes</div>
+                <div class="stat-value" id="rep-orders">0</div>
+            </div>
+            <div class="stat-card">
+                <div>Ticket Promedio</div>
+                <div class="stat-value" id="rep-avg">$0</div>
+            </div>
+        </div>
+        
+        <div style="display: flex; gap: 20px; flex-wrap: wrap;">
+            <div style="flex: 1; min-width: 300px; background: var(--bg-panel); padding: 20px; border-radius: 8px;">
+                <h3>Top Productos</h3>
+                <ul id="rep-top-products" style="list-style: none; margin-top: 10px; line-height: 1.8;"></ul>
+            </div>
+            <div style="flex: 1; min-width: 300px; background: var(--bg-panel); padding: 20px; border-radius: 8px;">
+                <h3>Top Variedades de Pizza</h3>
+                <ul id="rep-top-pizzas" style="list-style: none; margin-top: 10px; line-height: 1.8;"></ul>
+            </div>
+        </div>
+        
+        <div style="display: flex; gap: 20px; flex-wrap: wrap; margin-top: 20px;">
+            <div style="flex: 1; min-width: 300px; background: var(--bg-panel); padding: 20px; border-radius: 8px;">
+                <h3>Empanadas (Carne vs Pollo)</h3>
+                <div id="rep-empanadas" style="margin-top: 10px;"></div>
+            </div>
+            <div style="flex: 1; min-width: 300px; background: var(--bg-panel); padding: 20px; border-radius: 8px;">
+                <h3>Métodos de Pago</h3>
+                <div id="rep-payments" style="margin-top: 10px;"></div>
+            </div>
+        </div>
+        
+        <div style="background: var(--bg-panel); padding: 20px; border-radius: 8px; margin-top: 20px;">
+            <h3>Ventas por Día</h3>
+            <div style="display: flex; height: 250px; align-items: flex-end; gap: 10px; padding-top: 30px; border-bottom: 1px solid #555; margin-top: 10px;" id="rep-chart">
+            </div>
+            <div style="display: flex; gap: 10px; margin-top: 5px;" id="rep-chart-labels"></div>
+        </div>
+    </div>
+</div>
+
+<!-- TICKET MODAL -->
+<div class="modal-overlay" id="ticket-modal">
+    <div class="modal-content">
+        <div class="ticket-header">
+            <h2>🍕 Locos x la Pizza</h2>
+            <p id="ticket-date"></p>
+            <p>Ticket #<span id="ticket-id"></span></p>
+        </div>
+        <div id="ticket-items" style="margin-bottom: 20px;"></div>
+        <div class="ticket-total">
+            <span>TOTAL</span>
+            <span id="ticket-total-amount"></span>
+        </div>
+        <p style="text-align: right; margin-top: 5px; color: #666;" id="ticket-payment"></p>
+        <div style="display:flex; gap:10px; margin-top:30px;">
+            <button class="btn-action" style="flex:1; background:#333; font-size:16px; padding:15px;" onclick="printTicket()">🖨️ Imprimir</button>
+            <button class="btn-action" style="flex:1; background:#25D366; font-size:16px; padding:15px;" onclick="shareWhatsApp()">📲 WhatsApp</button>
+        </div>
+        <button class="btn-action" style="margin-top: 10px;" onclick="closeTicket()">NUEVA ORDEN</button>
+    </div>
+</div>
+
+<!-- SETTINGS MODAL -->
+<div class="modal-overlay" id="settings-modal">
+    <div class="modal-content dark">
+        <h2 style="margin-bottom: 20px; color: var(--primary);">⚙️ Configuración de Precios</h2>
+        <div id="settings-form" style="max-height: 60vh; overflow-y: auto; padding-right: 10px;"></div>
+        <div style="display: flex; gap: 10px; margin-top: 20px;">
+            <button class="btn-action" style="background: #555;" onclick="closeSettings()">Cancelar</button>
+            <button class="btn-action" onclick="saveSettings()">Guardar Cambios</button>
+        </div>
+    </div>
+</div>
+
+<script>
+// --- DATA ---
+const defaultData = {
+    pizzas: [
+        { name: "Muzarella", p4: 5000, p8: 9000, p18: 18000, p36: 29000 },
+        { name: "Especial", p4: 6000, p8: 11000, p18: 22000, p36: 37000 },
+        { name: "Napolitana", p4: 6000, p8: 11000, p18: 22000, p36: 37000 },
+        { name: "Muzza Completa", p4: 6000, p8: 11000, p18: 22000, p36: 37000 },
+        { name: "Fugazetta", p4: 6000, p8: 11000, p18: 22000, p36: 37000 },
+        { name: "Choclo", p4: 6000, p8: 11000, p18: 22000, p36: 37000 },
+        { name: "Provolone", p4: 7000, p8: 12000, p18: 24000, p36: 40000 },
+        { name: "Berenjena", p4: 7000, p8: 12000, p18: 24000, p36: 40000 },
+        { name: "Roquefort", p4: 7000, p8: 12000, p18: 24000, p36: 40000 },
+        { name: "Calabresa", p4: 7000, p8: 12000, p18: 24000, p36: 40000 },
+        { name: "Siciliana", p4: 7000, p8: 12000, p18: 24000, p36: 40000 },
+        { name: "Bondiola", p4: 7000, p8: 12000, p18: 24000, p36: 40000 },
+        { name: "Primavera", p4: 7000, p8: 12000, p18: 24000, p36: 40000 },
+        { name: "Bambolera", p4: 8000, p8: 14000, p18: 26000, p36: 45000 },
+        { name: "Doble Provolone", p4: 8000, p8: 14000, p18: 26000, p36: 45000 },
+        { name: "Super Calabresa", p4: 8000, p8: 14000, p18: 26000, p36: 45000 },
+        { name: "Super Roquefort", p4: 8000, p8: 14000, p18: 26000, p36: 45000 },
+        { name: "Brasilera", p4: 8000, p8: 14000, p18: 26000, p36: 45000 },
+        { name: "Rucula", p4: 8000, p8: 14000, p18: 26000, p36: 45000 },
+        { name: "4 Quesos", p4: 8000, p8: 14000, p18: 26000, p36: 45000 },
+        { name: "Palmitos", p4: 8000, p8: 14000, p18: 26000, p36: 45000 },
+        { name: "Americana", p4: 8000, p8: 14000, p18: 26000, p36: 45000 },
+        { name: "Champiñones", p4: 8000, p8: 14000, p18: 26000, p36: 45000 },
+        { name: "Napozetta", p4: 8000, p8: 14000, p18: 26000, p36: 45000 }
+    ],
+    empanadas: {
+        unidad: 2000,
+        media: 12000,
+        docena: 20000
+    }
+};
+
+let db = JSON.parse(localStorage.getItem('locos_db')) || defaultData;
+let sales = JSON.parse(localStorage.getItem('locos_sales')) || [];
+
+// --- STATE ---
+let currentOrder = [];
+let flowState = { step: 1, category: null, size: null, numVarieties: 1, selections: [], doubleVariety: null, qty: 1, empSplit: { carne: 0, pollo: 0 }, ketoDough: null };
+let paymentMethod = 'Efectivo';
+
+// --- UTILS ---
+const formatMoney = (amount) => '$' + amount.toLocaleString('es-AR');
+const saveDB = () => localStorage.setItem('locos_db', JSON.stringify(db));
+const saveSales = () => localStorage.setItem('locos_sales', JSON.stringify(sales));
+
+// --- NAVIGATION ---
+function switchTab(tabId, btn) {
+    document.querySelectorAll('.section').forEach(s => s.style.display = 'none');
+    document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
+    document.getElementById(tabId).style.display = 'flex';
+    if(btn) btn.classList.add('active');
+    if (tabId === 'historial') renderHistory();
+    if (tabId === 'reportes') renderReports();
+}
+
+// --- FLOW ENGINE ---
+function renderFlow() {
+    const container = document.getElementById('flow-container');
+    let html = '';
+
+    if (flowState.step === 1) {
+        html = `
+            <h2 class="step-title">1. ¿Qué vas a agregar?</h2>
+            <div class="grid-buttons">
+                <button class="btn btn-large" onclick="setCategory('pizza')">🍕 Pizza</button>
+                <button class="btn btn-large" onclick="setCategory('keto')">🥗 Pizza Keto</button>
+                <button class="btn btn-large" onclick="setCategory('empanadas')">🥟 Empanadas</button>
+            </div>
+        `;
+    } 
+    else if (flowState.category === 'keto') {
+        if (flowState.step === 2) {
+            html = `
+                <button class="btn" style="margin-bottom:15px; width:fit-content" onclick="resetFlow()">⬅ Volver</button>
+                <h2 class="step-title">2. Elegí la masa</h2>
+                <div class="grid-buttons">
+                    <button class="btn" onclick="setKetoDough('Harina de Almendras')">Harina de Almendras</button>
+                    <button class="btn" onclick="setKetoDough('Fécula de Arroz, Maíz y Mandioca')">Fécula de Arroz, Maíz y Mandioca</button>
+                </div>
+            `;
+        } else if (flowState.step === 3) {
+            html = `
+                <button class="btn" style="margin-bottom:15px; width:fit-content" onclick="flowState.step=2; renderFlow()">⬅ Volver</button>
+                <h2 class="step-title">3. Elegí la variedad</h2>
+                <div class="grid-buttons">
+                    ${db.pizzas.map((p, i) => `
+                        <button class="btn" onclick="selectKetoVariety(${i})">
+                            ${p.name}
+                            <div class="price-tag">${formatMoney(p.p4)}</div>
+                        </button>
+                    `).join('')}
+                </div>
+            `;
+        } else if (flowState.step === 4) {
+            let p = db.pizzas[flowState.selections[0]];
+            html = `
+                <button class="btn" style="margin-bottom:15px; width:fit-content" onclick="flowState.selections=[]; flowState.step=3; renderFlow()">⬅ Volver</button>
+                <h2 class="step-title">4. Confirmar Cantidad</h2>
+                <div style="background:#333; padding:15px; border-radius:8px; text-align:center; margin-bottom:20px;">
+                    <h3>Pizza Keto (${flowState.ketoDough})</h3>
+                    <p style="color:var(--text-muted)">${p.name}</p>
+                    <h2 style="color:var(--primary); margin-top:10px;">${formatMoney(p.p4)} c/u</h2>
+                </div>
+                <div class="quantity-selector">
+                    <button class="qty-btn" onclick="changeQty(-1)">-</button>
+                    <div class="qty-display">${flowState.qty}</div>
+                    <button class="qty-btn" onclick="changeQty(1)">+</button>
+                </div>
+                <button class="btn-action" onclick="addKetoToOrder(${p.p4}, '${p.name}')">AGREGAR A LA ORDEN</button>
+            `;
+        }
+    }
+    else if (flowState.category === 'pizza') {
+        if (flowState.step === 2) {
+            html = `
+                <button class="btn" style="margin-bottom:15px; width:fit-content" onclick="resetFlow()">⬅ Volver</button>
+                <h2 class="step-title">2. Tamaño de Pizza</h2>
+                <div class="grid-buttons">
+                    <button class="btn" onclick="setSize('p4', '4 porciones')">4 Porciones</button>
+                    <button class="btn" onclick="setSize('p8', '8 porciones')">8 Porciones</button>
+                    <button class="btn" onclick="setSize('p18', 'Mitad & Mitad (18p)')">Mitad & Mitad (18p)</button>
+                    <button class="btn" onclick="setSize('p36', 'Cuatro Cuartos (36p)')">Cuatro Cuartos (36p)</button>
+                </div>
+            `;
+        } else if (flowState.step === 3) {
+            html = `
+                <button class="btn" style="margin-bottom:15px; width:fit-content" onclick="flowState.step=2; renderFlow()">⬅ Volver</button>
+                <h2 class="step-title">3. Cantidad de variedades</h2>
+                <div class="grid-buttons">
+            `;
+            if (flowState.size === 'p8') {
+                html += `
+                    <button class="btn" onclick="setNumVarieties(1)">1 variedad</button>
+                    <button class="btn" onclick="setNumVarieties(2)">2 variedades</button>
+                `;
+            } else if (flowState.size === 'p18') {
+                html += `
+                    <button class="btn" onclick="setNumVarieties(1)">1 variedad</button>
+                    <button class="btn" onclick="setNumVarieties(2)">2 variedades (Mitad & Mitad)</button>
+                `;
+            } else if (flowState.size === 'p36') {
+                html += `
+                    <button class="btn" onclick="setNumVarieties(1)">1 variedad</button>
+                    <button class="btn" onclick="setNumVarieties(2)">2 variedades</button>
+                    <button class="btn" onclick="setNumVarieties(3)">3 variedades</button>
+                    <button class="btn" onclick="setNumVarieties(4)">4 variedades</button>
+                `;
+            }
+            html += `</div>`;
+        } else if (flowState.step === 4) {
+            if (flowState.size === 'p36' && flowState.numVarieties === 3 && flowState.selections.length === 3 && flowState.doubleVariety === null) {
+                html = `
+                    <button class="btn" style="margin-bottom:15px; width:fit-content" onclick="flowState.selections.pop(); renderFlow()">⬅ Volver</button>
+                    <h2 class="step-title">¿Cuál variedad va en dos cuartos?</h2>
+                    <div class="grid-buttons">
+                        ${flowState.selections.map((selIdx, i) => `
+                            <button class="btn" onclick="setDoubleVariety(${i})">${db.pizzas[selIdx].name}</button>
+                        `).join('')}
+                    </div>
+                `;
+            } else {
+                let title = `Elegí la variedad ${flowState.selections.length + 1} de ${flowState.numVarieties}`;
+                let currentPrice = calculatePizzaPrice();
+                
+                html = `
+                    <button class="btn" style="margin-bottom:15px; width:fit-content" onclick="goBackVariety()">⬅ Volver</button>
+                    <h2 class="step-title">${title}</h2>
+                    <div style="background:#333; padding:10px; border-radius:8px; margin-bottom:15px; text-align:center;">
+                        <span style="color:var(--text-muted)">Precio estimado:</span> 
+                        <strong style="color:var(--primary); font-size:20px;">${formatMoney(currentPrice)}</strong>
+                    </div>
+                    <div class="grid-buttons">
+                        ${db.pizzas.map((p, i) => `
+                            <button class="btn" onclick="selectPizzaVariety(${i})">
+                                ${p.name}
+                            </button>
+                        `).join('')}
+                    </div>
+                `;
+            }
+        } else if (flowState.step === 5) {
+            let price = calculatePizzaPrice();
+            let desc = getPizzaDescription();
+            html = `
+                <button class="btn" style="margin-bottom:15px; width:fit-content" onclick="goBackToVarieties()">⬅ Volver</button>
+                <h2 class="step-title">Confirmar Cantidad</h2>
+                <div style="background:#333; padding:15px; border-radius:8px; text-align:center; margin-bottom:20px;">
+                    <h3>Pizza ${flowState.sizeName}</h3>
+                    <p style="color:var(--text-muted)">${desc}</p>
+                    <h2 style="color:var(--primary); margin-top:10px;">${formatMoney(price)} c/u</h2>
+                </div>
+                <div class="quantity-selector">
+                    <button class="qty-btn" onclick="changeQty(-1)">-</button>
+                    <div class="qty-display">${flowState.qty}</div>
+                    <button class="qty-btn" onclick="changeQty(1)">+</button>
+                </div>
+                <button class="btn-action" onclick="addPizzaToOrder(${price}, '${desc}')">AGREGAR A LA ORDEN</button>
+            `;
+        }
+    }
+    else if (flowState.category === 'empanadas') {
+        if (flowState.step === 2) {
+            html = `
+                <button class="btn" style="margin-bottom:15px; width:fit-content" onclick="resetFlow()">⬅ Volver</button>
+                <h2 class="step-title">2. Formato</h2>
+                <div class="grid-buttons">
+                    <button class="btn" onclick="setEmpSize('unidad', 1, ${db.empanadas.unidad})">Unidad<br><span class="price-tag">${formatMoney(db.empanadas.unidad)}</span></button>
+                    <button class="btn" onclick="setEmpSize('media', 6, ${db.empanadas.media})">Media Docena<br><span class="price-tag">${formatMoney(db.empanadas.media)}</span></button>
+                    <button class="btn" onclick="setEmpSize('docena', 12, ${db.empanadas.docena})">Docena<br><span class="price-tag">${formatMoney(db.empanadas.docena)}</span></button>
+                </div>
+            `;
+        } else if (flowState.step === 3) {
+            if (flowState.size === 'unidad') {
+                html = `
+                    <button class="btn" style="margin-bottom:15px; width:fit-content" onclick="flowState.step=2; renderFlow()">⬅ Volver</button>
+                    <h2 class="step-title">3. Variedad y Cantidad</h2>
+                    <div class="grid-buttons" style="margin-bottom:30px;">
+                        <button class="btn ${flowState.selections[0]==='Carne'?'selected':''}" onclick="flowState.selections[0]='Carne'; renderFlow()">🥩 Carne</button>
+                        <button class="btn ${flowState.selections[0]==='Pollo'?'selected':''}" onclick="flowState.selections[0]='Pollo'; renderFlow()">🍗 Pollo</button>
+                    </div>
+                    ${flowState.selections[0] ? `
+                        <div class="quantity-selector">
+                            <button class="qty-btn" onclick="changeQty(-1)">-</button>
+                            <div class="qty-display">${flowState.qty}</div>
+                            <button class="qty-btn" onclick="changeQty(1)">+</button>
+                        </div>
+                        <button class="btn-action" onclick="addEmpanadaUnidad()">AGREGAR A LA ORDEN</button>
+                    ` : ''}
+                `;
+            } else {
+                let req = flowState.size === 'media' ? 6 : 12;
+                let tot = flowState.empSplit.carne + flowState.empSplit.pollo;
+                let ready = tot === req;
+                html = `
+                    <button class="btn" style="margin-bottom:15px; width:fit-content" onclick="flowState.step=2; renderFlow()">⬅ Volver</button>
+                    <h2 class="step-title">3. Armar ${flowState.sizeName}</h2>
+                    <div class="empanada-split">
+                        <div class="split-row">
+                            <span style="font-size:18px;">🥩 Carne</span>
+                            <div class="quantity-selector" style="margin:0;">
+                                <button class="qty-btn" onclick="changeEmpSplit('carne', -1)">-</button>
+                                <div class="qty-display">${flowState.empSplit.carne}</div>
+                                <button class="qty-btn" onclick="changeEmpSplit('carne', 1)">+</button>
+                            </div>
+                        </div>
+                        <div class="split-row">
+                            <span style="font-size:18px;">🍗 Pollo</span>
+                            <div class="quantity-selector" style="margin:0;">
+                                <button class="qty-btn" onclick="changeEmpSplit('pollo', -1)">-</button>
+                                <div class="qty-display">${flowState.empSplit.pollo}</div>
+                                <button class="qty-btn" onclick="changeEmpSplit('pollo', 1)">+</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="split-status" style="color: ${ready ? 'var(--success)' : 'var(--warning)'}">
+                        ${ready ? `✅ ${tot} de ${req}` : `⚠️ ${tot} de ${req} (Faltan ${req - tot})`}
+                    </div>
+                    <div class="quantity-selector" style="margin-top:30px;">
+                        <span style="font-size:14px; color:#aaa; margin-right:10px;">Cajas:</span>
+                        <button class="qty-btn" onclick="changeQty(-1)">-</button>
+                        <div class="qty-display">${flowState.qty}</div>
+                        <button class="qty-btn" onclick="changeQty(1)">+</button>
+                    </div>
+                    <button class="btn-action" onclick="addEmpanadaPack()" ${!ready ? 'disabled' : ''}>AGREGAR A LA ORDEN</button>
+                `;
+            }
+        }
+    }
+
+    container.innerHTML = html;
+}
+
+function resetFlow() {
+    flowState = { step: 1, category: null, size: null, numVarieties: 1, selections: [], doubleVariety: null, qty: 1, empSplit: { carne: 0, pollo: 0 }, ketoDough: null };
+    renderFlow();
+}
+
+function setCategory(cat) { flowState.category = cat; flowState.step = 2; renderFlow(); }
+
+function setSize(size, name) { 
+    flowState.size = size; 
+    flowState.sizeName = name; 
+    if (size === 'p4') {
+        flowState.numVarieties = 1;
+        flowState.step = 4;
+    } else {
+        flowState.step = 3; 
+    }
+    renderFlow(); 
+}
+
+function setNumVarieties(num) {
+    flowState.numVarieties = num;
+    flowState.step = 4;
+    renderFlow();
+}
+
+function setEmpSize(size, req, price) { flowState.size = size; flowState.sizeName = size === 'media' ? 'Media Docena' : (size === 'docena' ? 'Docena' : 'Unidad'); flowState.price = price; flowState.step = 3; renderFlow(); }
+
+function selectPizzaVariety(idx) {
+    flowState.selections.push(idx);
+    if (flowState.selections.length === flowState.numVarieties) {
+        if (flowState.size === 'p36' && flowState.numVarieties === 3 && flowState.doubleVariety === null) {
+            // stay on step 4
+        } else {
+            flowState.step = 5;
+        }
+    }
+    renderFlow();
+}
+
+function setDoubleVariety(idx) {
+    flowState.doubleVariety = idx;
+    flowState.step = 5;
+    renderFlow();
+}
+
+function goBackVariety() {
+    if (flowState.selections.length > 0) {
+        flowState.selections.pop();
+        flowState.doubleVariety = null;
+    } else {
+        if (flowState.size === 'p4') flowState.step = 2;
+        else flowState.step = 3;
+    }
+    renderFlow();
+}
+
+function goBackToVarieties() {
+    if (flowState.size === 'p36' && flowState.numVarieties === 3) {
+        flowState.doubleVariety = null;
+        flowState.step = 4;
+    } else {
+        flowState.selections.pop();
+        flowState.step = 4;
+    }
+    renderFlow();
+}
+
+function getPizzaDescription() {
+    let s = flowState.selections.map(i => db.pizzas[i].name);
+    if (s.length === 1) return s[0];
+    if (flowState.size === 'p36' && flowState.numVarieties === 3) {
+        let d = flowState.doubleVariety;
+        let others = s.filter((_, idx) => idx !== d);
+        return `${s[d]} (media) + ${others[0]} (cuarto) + ${others[1]} (cuarto)`;
+    }
+    return s.join(' + ') + (flowState.numVarieties === 2 && flowState.size === 'p8' ? ' (mitad + mitad)' : '');
+}
+
+function calculatePizzaPrice() {
+    let price = 0;
+    let s = flowState.selections.map(i => db.pizzas[i]);
+    if (s.length === 0) return 0;
+
+    if (flowState.size === 'p4') {
+        price = s[0].p4;
+    } else if (flowState.size === 'p8') {
+        if (flowState.numVarieties === 1) price = s[0].p8;
+        else if (flowState.numVarieties === 2) {
+            price = (s[0] ? s[0].p4 : 0) + (s[1] ? s[1].p4 : 0);
+        }
+    } else if (flowState.size === 'p18') {
+        if (flowState.numVarieties === 1) price = s[0].p18;
+        else if (flowState.numVarieties === 2) {
+            price = (s[0] ? s[0].p8 : 0) + (s[1] ? s[1].p8 : 0);
+        }
+    } else if (flowState.size === 'p36') {
+        if (flowState.numVarieties === 1) price = s[0].p36;
+        else if (flowState.numVarieties === 2) {
+            price = (s[0] ? s[0].p18 : 0) + (s[1] ? s[1].p18 : 0);
+        } else if (flowState.numVarieties === 3) {
+            let d = flowState.doubleVariety;
+            if (d !== null) {
+                let others = s.filter((_, idx) => idx !== d);
+                price = s[d].p18 + (others[0] ? others[0].p8 : 0) + (others[1] ? others[1].p8 : 0);
+            } else {
+                price = (s[0] ? s[0].p18 : 0) + (s[1] ? s[1].p8 : 0) + (s[2] ? s[2].p8 : 0);
+            }
+        } else if (flowState.numVarieties === 4) {
+            price = (s[0] ? s[0].p8 : 0) + (s[1] ? s[1].p8 : 0) + (s[2] ? s[2].p8 : 0) + (s[3] ? s[3].p8 : 0);
+        }
+    }
+    return price;
+}
+
+function setKetoDough(dough) {
+    flowState.ketoDough = dough;
+    flowState.step = 3;
+    renderFlow();
+}
+
+function selectKetoVariety(idx) {
+    flowState.selections = [idx];
+    flowState.step = 4;
+    renderFlow();
+}
+
+function addKetoToOrder(price, desc) {
+    currentOrder.push({
+        type: 'keto',
+        title: `Pizza Keto`,
+        desc: `${desc} (${flowState.ketoDough})`,
+        qty: flowState.qty,
+        unitPrice: price,
+        subtotal: price * flowState.qty
+    });
+    updateOrder();
+    resetFlow();
+}
+
+function changeQty(delta) {
+    if (flowState.qty + delta > 0) flowState.qty += delta;
+    renderFlow();
+}
+
+function changeEmpSplit(type, delta) {
+    let req = flowState.size === 'media' ? 6 : 12;
+    let tot = flowState.empSplit.carne + flowState.empSplit.pollo;
+    if (delta > 0 && tot < req) flowState.empSplit[type]++;
+    else if (delta < 0 && flowState.empSplit[type] > 0) flowState.empSplit[type]--;
+    renderFlow();
+}
+
+// --- ORDER MANAGEMENT ---
+function addPizzaToOrder(price, desc) {
+    currentOrder.push({
+        type: 'pizza',
+        title: `Pizza ${flowState.sizeName}`,
+        desc: desc,
+        qty: flowState.qty,
+        unitPrice: price,
+        subtotal: price * flowState.qty
+    });
+    updateOrder();
+    resetFlow();
+}
+
+function addEmpanadaUnidad() {
+    currentOrder.push({
+        type: 'empanada',
+        title: `Empanada (${flowState.selections[0]})`,
+        desc: 'Unidad',
+        qty: flowState.qty,
+        unitPrice: db.empanadas.unidad,
+        subtotal: db.empanadas.unidad * flowState.qty
+    });
+    updateOrder();
+    resetFlow();
+}
+
+function addEmpanadaPack() {
+    let desc = `Carne x${flowState.empSplit.carne} / Pollo x${flowState.empSplit.pollo}`;
+    currentOrder.push({
+        type: 'empanada',
+        title: `Empanadas - ${flowState.sizeName}`,
+        desc: desc,
+        qty: flowState.qty,
+        unitPrice: flowState.price,
+        subtotal: flowState.price * flowState.qty
+    });
+    updateOrder();
+    resetFlow();
+}
+
+function removeOrderItem(idx) {
+    currentOrder.splice(idx, 1);
+    updateOrder();
+}
+
+function updateOrder() {
+    const list = document.getElementById('order-items');
+    let total = 0;
+    list.innerHTML = currentOrder.map((item, i) => {
+        total += item.subtotal;
+        return `
+            <div class="order-item">
+                <div class="item-info">
+                    <div class="item-title">${item.qty}x ${item.title}</div>
+                    ${item.desc ? `<div class="item-desc">${item.desc}</div>` : ''}
+                </div>
+                <div class="item-price">${formatMoney(item.subtotal)}</div>
+                <button class="btn-delete" onclick="removeOrderItem(${i})">✕</button>
+            </div>
+        `;
+    }).join('');
+    
+    document.getElementById('order-total').innerText = total.toLocaleString('es-AR');
+    document.getElementById('btn-cobrar').disabled = currentOrder.length === 0;
+    calculateChange();
+}
+
+function setPayment(method, btn) {
+    paymentMethod = method;
+    document.querySelectorAll('.pay-btn').forEach(b => b.classList.remove('selected'));
+    if(btn) btn.classList.add('selected');
+    
+    const cashInput = document.getElementById('cash-input-container');
+    if (method === 'Efectivo') {
+        cashInput.classList.add('active');
+        document.getElementById('cash-received').value = '';
+        document.getElementById('change-display').innerText = 'Vuelto: $0';
+    } else {
+        cashInput.classList.remove('active');
+    }
+}
+
+function calculateChange() {
+    if (paymentMethod !== 'Efectivo') return;
+    let total = currentOrder.reduce((sum, item) => sum + item.subtotal, 0);
+    let received = parseFloat(document.getElementById('cash-received').value) || 0;
+    let change = received - total;
+    let display = document.getElementById('change-display');
+    if (change >= 0 && received > 0) {
+        display.innerText = `Vuelto: ${formatMoney(change)}`;
+        display.style.color = 'var(--success)';
+    } else {
+        display.innerText = 'Vuelto: $0';
+        display.style.color = 'var(--text-muted)';
+    }
+}
+
+function processPayment() {
+    if (currentOrder.length === 0) return;
+    let total = currentOrder.reduce((sum, item) => sum + item.subtotal, 0);
+    
+    let sale = {
+        id: Date.now().toString().slice(-6),
+        date: new Date().toISOString(),
+        items: [...currentOrder],
+        total: total,
+        paymentMethod: paymentMethod,
+        status: 'completed'
+    };
+    
+    sales.unshift(sale);
+    saveSales();
+    
+    // Show ticket
+    document.getElementById('ticket-date').innerText = new Date().toLocaleString('es-AR');
+    document.getElementById('ticket-id').innerText = sale.id;
+    document.getElementById('ticket-items').innerHTML = currentOrder.map(item => `
+        <div class="ticket-item">
+            <span>${item.qty}x ${item.title}</span>
+            <span>${formatMoney(item.subtotal)}</span>
+        </div>
+        ${item.desc ? `<div style="font-size:12px; color:#666; margin-bottom:5px;">${item.desc}</div>` : ''}
+    `).join('');
+    document.getElementById('ticket-total-amount').innerText = formatMoney(total);
+    document.getElementById('ticket-payment').innerText = `Pago: ${paymentMethod}`;
+    
+    document.getElementById('ticket-modal').classList.add('active');
+}
+
+function closeTicket() {
+    document.getElementById('ticket-modal').classList.remove('active');
+    currentOrder = [];
+    updateOrder();
+    resetFlow();
+    document.getElementById('cash-received').value = '';
+    document.getElementById('change-display').innerText = 'Vuelto: $0';
+}
+
+// --- HISTORIAL ---
+function renderHistory() {
+    const list = document.getElementById('history-list');
+    const dateFilter = document.getElementById('hist-filter-date').value;
+    const payFilter = document.getElementById('hist-filter-pay').value;
+    
+    const todayStr = new Date().toLocaleDateString('es-AR');
+    
+    let filtered = sales.filter(s => s.status === 'completed');
+    
+    if (dateFilter === 'today') {
+        filtered = filtered.filter(s => new Date(s.date).toLocaleDateString('es-AR') === todayStr);
+    }
+    if (payFilter !== 'all') {
+        filtered = filtered.filter(s => s.paymentMethod === payFilter);
+    }
+    
+    if (filtered.length === 0) {
+        list.innerHTML = '<p style="color:var(--text-muted)">No hay ventas para los filtros seleccionados.</p>';
+        return;
+    }
+    
+    list.innerHTML = filtered.map(s => `
+        <div class="history-card" onclick="this.classList.toggle('expanded')">
+            <div style="flex:1">
+                <strong>#${s.id}</strong> - ${new Date(s.date).toLocaleTimeString('es-AR', {hour:'2-digit', minute:'2-digit'})}
+                <div style="font-size:12px; color:var(--text-muted)">${s.items.length} items • ${s.paymentMethod}</div>
+            </div>
+            <div style="font-size:18px; font-weight:bold; color:var(--success)">${formatMoney(s.total)}</div>
+            <div class="history-details" onclick="event.stopPropagation()">
+                ${s.items.map(i => `<div>${i.qty}x ${i.title} - ${formatMoney(i.subtotal)}</div>`).join('')}
+                <button class="btn-delete" style="margin-top:10px; border:1px solid var(--danger); border-radius:4px; padding:5px 10px;" onclick="anularVenta('${s.id}')">Anular Venta</button>
+            </div>
+        </div>
+    `).join('');
+}
+
+function anularVenta(id) {
+    if (confirm('¿Seguro que querés anular esta venta?')) {
+        let sale = sales.find(s => s.id === id);
+        if (sale) {
+            sale.status = 'cancelled';
+            saveSales();
+            renderHistory();
+            renderReports();
+            
+            let msg = document.createElement('div');
+            msg.innerText = 'Venta anulada ✅';
+            msg.style.cssText = 'position:fixed; bottom:20px; right:20px; background:var(--success); color:white; padding:15px 20px; border-radius:8px; font-weight:bold; z-index:1000; box-shadow:0 4px 6px rgba(0,0,0,0.3);';
+            document.body.appendChild(msg);
+            setTimeout(() => msg.remove(), 3000);
+        }
+    }
+}
+
+// --- REPORTES ---
+function renderReports() {
+    const filter = document.getElementById('rep-filter-date').value;
+    const now = new Date();
+    let start = new Date(0);
+    
+    if (filter === 'today') {
+        start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    } else if (filter === 'week') {
+        start = new Date(now);
+        start.setDate(now.getDate() - now.getDay());
+        start.setHours(0,0,0,0);
+    } else if (filter === 'month') {
+        start = new Date(now.getFullYear(), now.getMonth(), 1);
+    }
+    
+    let validSales = sales.filter(s => s.status === 'completed' && new Date(s.date) >= start);
+    
+    let total = validSales.reduce((sum, s) => sum + s.total, 0);
+    let orders = validSales.length;
+    let avg = orders > 0 ? total / orders : 0;
+    
+    document.getElementById('rep-total').innerText = formatMoney(total);
+    document.getElementById('rep-orders').innerText = orders;
+    document.getElementById('rep-avg').innerText = formatMoney(avg);
+    
+    // Payment breakdown
+    let pays = { Efectivo: 0, Transferencia: 0, Tarjeta: 0 };
+    validSales.forEach(s => pays[s.paymentMethod] += s.total);
+    
+    document.getElementById('rep-payments').innerHTML = Object.entries(pays).map(([k, v]) => {
+        let pct = total > 0 ? (v / total * 100).toFixed(1) : 0;
+        return `
+            <div style="margin-bottom:10px;">
+                <div style="display:flex; justify-content:space-between; font-size:14px;">
+                    <span>${k}</span><span>${pct}% (${formatMoney(v)})</span>
+                </div>
+                <div style="background:#444; height:8px; border-radius:4px; margin-top:5px; overflow:hidden;">
+                    <div style="background:var(--primary); height:100%; width:${pct}%"></div>
+                </div>
+            </div>
+        `;
+    }).join('');
+    
+    // Products breakdown
+    let products = {};
+    let pizzas = {};
+    let empanadas = { Carne: 0, Pollo: 0 };
+    
+    validSales.forEach(s => {
+        s.items.forEach(i => {
+            products[i.title] = (products[i.title] || 0) + i.qty;
+            
+            if (i.type === 'pizza' || i.type === 'keto') {
+                let vars = i.desc.split(' + ');
+                vars.forEach(v => {
+                    let cleanVar = v.replace(/ \(media\)| \(cuarto\)| \(mitad \+ mitad\)| \(Harina de Almendras\)| \(Fécula de Arroz, Maíz y Mandioca\)/g, '');
+                    pizzas[cleanVar] = (pizzas[cleanVar] || 0) + i.qty;
+                });
+            } else if (i.type === 'empanada') {
+                if (i.desc === 'Unidad') {
+                    let type = i.title.includes('Carne') ? 'Carne' : 'Pollo';
+                    empanadas[type] += i.qty;
+                } else {
+                    let match = i.desc.match(/Carne x(\d+) \/ Pollo x(\d+)/);
+                    if (match) {
+                        empanadas.Carne += parseInt(match[1]) * i.qty;
+                        empanadas.Pollo += parseInt(match[2]) * i.qty;
+                    }
+                }
+            }
+        });
+    });
+    
+    let topProds = Object.entries(products).sort((a,b) => b[1] - a[1]).slice(0, 5);
+    let topPizzas = Object.entries(pizzas).sort((a,b) => b[1] - a[1]).slice(0, 5);
+    
+    let prodsHtml = topProds.map(p => `
+        <li style="display:flex; justify-content:space-between; border-bottom:1px solid #444; padding:5px 0;">
+            <span>${p[0]}</span> <strong>${p[1]}</strong>
+        </li>
+    `).join('');
+    
+    let pizzasHtml = topPizzas.map(p => `
+        <li style="display:flex; justify-content:space-between; border-bottom:1px solid #444; padding:5px 0;">
+            <span>${p[0]}</span> <strong>${p[1]}</strong>
+        </li>
+    `).join('');
+    
+    let empTotal = empanadas.Carne + empanadas.Pollo;
+    let empHtml = empTotal > 0 ? `
+        <div style="margin-bottom:10px;">
+            <div style="display:flex; justify-content:space-between; font-size:14px;">
+                <span>🥩 Carne</span><span>${((empanadas.Carne/empTotal)*100).toFixed(1)}% (${empanadas.Carne})</span>
+            </div>
+            <div style="background:#444; height:8px; border-radius:4px; margin-top:5px; overflow:hidden;">
+                <div style="background:var(--primary); height:100%; width:${(empanadas.Carne/empTotal)*100}%"></div>
+            </div>
+        </div>
+        <div style="margin-bottom:10px;">
+            <div style="display:flex; justify-content:space-between; font-size:14px;">
+                <span>🍗 Pollo</span><span>${((empanadas.Pollo/empTotal)*100).toFixed(1)}% (${empanadas.Pollo})</span>
+            </div>
+            <div style="background:#444; height:8px; border-radius:4px; margin-top:5px; overflow:hidden;">
+                <div style="background:var(--warning); height:100%; width:${(empanadas.Pollo/empTotal)*100}%"></div>
+            </div>
+        </div>
+    ` : '<p style="color:#666">Sin datos</p>';
+    
+    document.getElementById('rep-top-products').innerHTML = prodsHtml || '<li style="color:#666">Sin datos</li>';
+    document.getElementById('rep-top-pizzas').innerHTML = pizzasHtml || '<li style="color:#666">Sin datos</li>';
+    document.getElementById('rep-empanadas').innerHTML = empHtml;
+    
+    // Chart (Sales per day)
+    let days = {};
+    validSales.forEach(s => {
+        let d = new Date(s.date).toLocaleDateString('es-AR', {day:'2-digit', month:'2-digit'});
+        days[d] = (days[d] || 0) + s.total;
+    });
+    
+    let chartHtml = '';
+    let labelsHtml = '';
+    let maxDay = Math.max(...Object.values(days), 1);
+    
+    Object.entries(days).sort((a,b) => a[0].localeCompare(b[0])).slice(-7).forEach(([d, v]) => {
+        let h = (v / maxDay * 100) + '%';
+        chartHtml += `<div style="flex:1; display:flex; flex-direction:column; justify-content:flex-end; align-items:center; height:100%;">
+            <div class="bar" style="height:${h}"><span>$${(v/1000).toFixed(0)}k</span></div>
+        </div>`;
+        labelsHtml += `<div style="flex:1; text-align:center; font-size:10px; color:#aaa;">${d}</div>`;
+    });
+    
+    document.getElementById('rep-chart').innerHTML = chartHtml || '<div style="width:100%; text-align:center; color:#666;">Sin datos</div>';
+    document.getElementById('rep-chart-labels').innerHTML = labelsHtml;
+}
+
+// --- SETTINGS ---
+function openSettings() {
+    let html = `
+        <h3 style="margin-top:10px; color:#aaa;">Empanadas</h3>
+        <div class="settings-group">
+            <label>Unidad</label><input type="number" id="set-emp-u" value="${db.empanadas.unidad}">
+            <label>Media Docena</label><input type="number" id="set-emp-m" value="${db.empanadas.media}">
+            <label>Docena</label><input type="number" id="set-emp-d" value="${db.empanadas.docena}">
+        </div>
+    `;
+    
+    document.getElementById('settings-form').innerHTML = html;
+    document.getElementById('settings-modal').classList.add('active');
+}
+
+function closeSettings() {
+    document.getElementById('settings-modal').classList.remove('active');
+}
+
+function saveSettings() {
+    db.empanadas.unidad = parseInt(document.getElementById('set-emp-u').value);
+    db.empanadas.media = parseInt(document.getElementById('set-emp-m').value);
+    db.empanadas.docena = parseInt(document.getElementById('set-emp-d').value);
+    
+    saveDB();
+    closeSettings();
+    if(flowState.category) resetFlow();
+}
+
+function shareWhatsApp() {
+    let sale = sales[0];
+    if (!sale) return;
+    
+    let text = `🍕 *Locos x la Pizza*\n📅 ${new Date(sale.date).toLocaleString('es-AR')}\n─────────────────\n`;
+    sale.items.forEach(i => {
+        text += `${i.title}${i.desc ? ` (${i.desc})` : ''} x${i.qty} — ${formatMoney(i.subtotal)}\n`;
+    });
+    text += `─────────────────\n💰 *TOTAL: ${formatMoney(sale.total)}*\n💳 Pago: ${sale.paymentMethod}\n`;
+    
+    if (sale.paymentMethod === 'Efectivo') {
+        let received = parseFloat(document.getElementById('cash-received').value) || sale.total;
+        let change = received - sale.total;
+        text += `Recibido: ${formatMoney(received)} | Vuelto: ${formatMoney(change)}\n`;
+    }
+    
+    text += `─────────────────\n¡Gracias por elegirnos! 🙌`;
+    
+    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
+}
+
+function printTicket() {
+    window.print();
+}
+
+// Init
+renderFlow();
+
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js')
+      .then(reg => console.log('SW registrado:', reg.scope))
+      .catch(err => console.log('SW error:', err));
+  });
+}
+
+let deferredPrompt;
+const installBtn = document.getElementById('installBtn');
+
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  deferredPrompt = e;
+  if (installBtn) installBtn.style.display = 'inline-block';
+});
+
+if (installBtn) {
+  installBtn.addEventListener('click', async () => {
+    if (!deferredPrompt) return;
+    deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+    if (outcome === 'accepted') {
+      installBtn.style.display = 'none';
+    }
+    deferredPrompt = null;
+  });
+}
+
+window.addEventListener('appinstalled', () => {
+  if (installBtn) installBtn.style.display = 'none';
+  deferredPrompt = null;
+});
+</script>
+</body>
+</html>
