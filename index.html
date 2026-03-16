@@ -153,7 +153,10 @@
     <div class="modal-content dark" style="width: 350px; text-align: center;">
         <h2 style="color: var(--primary); margin-bottom: 20px;">🍕 Locos x la Pizza</h2>
         <p style="margin-bottom: 20px; color: var(--text-muted);">Iniciá sesión para continuar</p>
-        <button class="btn-action" style="background: #4285F4; font-size: 16px; padding: 15px;" onclick="loginWithGoogle()">Ingresar con Google</button>
+        <input type="email" id="login-email" placeholder="Email" style="width: 100%; padding: 10px; margin-bottom: 10px; background: #333; border: 1px solid #444; color: white; border-radius: 5px; font-size: 16px;">
+        <input type="password" id="login-password" placeholder="Contraseña" style="width: 100%; padding: 10px; margin-bottom: 20px; background: #333; border: 1px solid #444; color: white; border-radius: 5px; font-size: 16px;">
+        <p id="login-error" style="color: var(--danger); font-size: 14px; margin-bottom: 15px; display: none;"></p>
+        <button class="btn-action" style="font-size: 16px; padding: 15px;" onclick="loginWithEmail()">Ingresar</button>
     </div>
 </div>
 
@@ -376,21 +379,53 @@ const saveSales = async (sale) => {
 };
 
 // --- AUTH & FIREBASE INIT ---
-function loginWithGoogle() {
-    const provider = new firebase.auth.GoogleAuthProvider();
-    auth.signInWithPopup(provider).catch(err => alert('Error: ' + err.message));
+async function loginWithEmail() {
+    const email = document.getElementById('login-email').value.trim();
+    const password = document.getElementById('login-password').value.trim();
+    const errorEl = document.getElementById('login-error');
+    
+    errorEl.style.display = 'none';
+    
+    if (!email || !password) {
+        errorEl.textContent = "Completá todos los campos";
+        errorEl.style.display = 'block';
+        return;
+    }
+    
+    try {
+        await auth.signInWithEmailAndPassword(email, password);
+    } catch (err) {
+        if (err.code === 'auth/wrong-password' || err.code === 'auth/user-not-found' || err.code === 'auth/invalid-credential') {
+            errorEl.textContent = "Email o contraseña incorrectos";
+        } else {
+            errorEl.textContent = "Error al iniciar sesión. Intentá de nuevo.";
+        }
+        errorEl.style.display = 'block';
+    }
 }
 
 function logout() {
     auth.signOut();
 }
 
-auth.onAuthStateChanged(user => {
+let userRole = null;
+
+auth.onAuthStateChanged(async user => {
     if (user) {
+        try {
+            const userDoc = await firestore.collection('users').doc(user.uid).get();
+            if (userDoc.exists) {
+                userRole = userDoc.data().role;
+            }
+        } catch (e) {
+            console.error("Error fetching user role:", e);
+        }
+        
         document.getElementById('login-modal').classList.remove('active');
         document.getElementById('branch-selector').style.display = 'inline-block';
         loadBranchData();
     } else {
+        userRole = null;
         document.getElementById('login-modal').classList.add('active');
         document.getElementById('branch-selector').style.display = 'none';
         if (unsubscribeSales) unsubscribeSales();
