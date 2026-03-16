@@ -11,6 +11,12 @@
     <meta name="apple-mobile-web-app-title" content="Locos x la Pizza">
     <link rel="apple-touch-icon" href="/icon-192.png">
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Firebase -->
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+    
     <style>
         :root {
             --primary: #C0392B;
@@ -129,13 +135,27 @@
 <header>
     <h1>🍕 Locos x la Pizza</h1>
     <nav>
+        <select id="branch-selector" style="display: none; padding: 5px; margin-right: 15px; background: #333; color: white; border: 1px solid #555; border-radius: 4px;" onchange="changeBranch()">
+            <option value="sucursal1">Sucursal 1</option>
+            <option value="sucursal2">Sucursal 2</option>
+        </select>
         <button id="installBtn" style="display: none; border: 1px solid white; border-radius: 4px; padding: 5px 10px;">📲 Instalar App</button>
         <button class="active" onclick="switchTab('caja', this)">Caja</button>
         <button onclick="switchTab('historial', this)">Historial</button>
         <button onclick="switchTab('reportes', this)">Reportes</button>
         <button onclick="openSettings()">⚙️</button>
+        <button onclick="logout()" style="color: var(--danger);">Salir</button>
     </nav>
 </header>
+
+<!-- LOGIN OVERLAY -->
+<div class="modal-overlay active" id="login-modal" style="z-index: 1000;">
+    <div class="modal-content dark" style="width: 350px; text-align: center;">
+        <h2 style="color: var(--primary); margin-bottom: 20px;">🍕 Locos x la Pizza</h2>
+        <p style="margin-bottom: 20px; color: var(--text-muted);">Iniciá sesión para continuar</p>
+        <button class="btn-action" style="background: #4285F4; font-size: 16px; padding: 15px;" onclick="loginWithGoogle()">Ingresar con Google</button>
+    </div>
+</div>
 
 <div class="container">
     <!-- CAJA SECTION -->
@@ -274,6 +294,21 @@
 </div>
 
 <script>
+// --- FIREBASE CONFIG ---
+const firebaseConfig = {
+    apiKey: "YOUR_API_KEY",
+    authDomain: "YOUR_AUTH_DOMAIN",
+    projectId: "YOUR_PROJECT_ID",
+    storageBucket: "YOUR_STORAGE_BUCKET",
+    messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
+    appId: "YOUR_APP_ID"
+};
+
+// Initialize Firebase
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+const firestore = firebase.firestore();
+
 // --- DATA ---
 const defaultData = {
     pizzas: [
@@ -309,18 +344,86 @@ const defaultData = {
     }
 };
 
-let db = JSON.parse(localStorage.getItem('locos_db')) || defaultData;
-let sales = JSON.parse(localStorage.getItem('locos_sales')) || [];
+let db = defaultData;
+let sales = [];
+let unsubscribeSales = null;
+let currentBranch = 'sucursal1';
 
 // --- STATE ---
 let currentOrder = [];
 let flowState = { step: 1, category: null, size: null, numVarieties: 1, selections: [], doubleVariety: null, qty: 1, empSplit: { carne: 0, pollo: 0 }, ketoDough: null };
 let paymentMethod = 'Efectivo';
+let lastSale = null;
 
 // --- UTILS ---
 const formatMoney = (amount) => '$' + amount.toLocaleString('es-AR');
-const saveDB = () => localStorage.setItem('locos_db', JSON.stringify(db));
-const saveSales = () => localStorage.setItem('locos_sales', JSON.stringify(sales));
+
+const saveDB = async () => {
+    try {
+        await firestore.collection('branches').doc(currentBranch).set({ prices: db }, { merge: true });
+    } catch (e) {
+        console.error("Error saving DB:", e);
+    }
+};
+
+const saveSales = async (sale) => {
+    try {
+        await firestore.collection('branches').doc(currentBranch).collection('sales').doc(sale.id).set(sale);
+    } catch (e) {
+        console.error("Error saving sale:", e);
+    }
+};
+
+// --- AUTH & FIREBASE INIT ---
+function loginWithGoogle() {
+    const provider = new firebase.auth.GoogleAuthProvider();
+    auth.signInWithPopup(provider).catch(err => alert('Error: ' + err.message));
+}
+
+function logout() {
+    auth.signOut();
+}
+
+auth.onAuthStateChanged(user => {
+    if (user) {
+        document.getElementById('login-modal').classList.remove('active');
+        document.getElementById('branch-selector').style.display = 'inline-block';
+        loadBranchData();
+    } else {
+        document.getElementById('login-modal').classList.add('active');
+        document.getElementById('branch-selector').style.display = 'none';
+        if (unsubscribeSales) unsubscribeSales();
+    }
+});
+
+function changeBranch() {
+    currentBranch = document.getElementById('branch-selector').value;
+    loadBranchData();
+}
+
+async function loadBranchData() {
+    if (unsubscribeSales) unsubscribeSales();
+    
+    // Load Prices
+    const doc = await firestore.collection('branches').doc(currentBranch).get();
+    if (doc.exists && doc.data().prices) {
+        db = doc.data().prices;
+    } else {
+        db = defaultData;
+        saveDB(); // Initialize default prices
+    }
+    
+    // Listen to Sales
+    unsubscribeSales = firestore.collection('branches').doc(currentBranch).collection('sales')
+        .orderBy('date', 'desc')
+        .onSnapshot(snapshot => {
+            sales = snapshot.docs.map(d => d.data());
+            if (document.getElementById('historial').style.display === 'flex') renderHistory();
+            if (document.getElementById('reportes').style.display === 'flex') renderReports();
+        });
+        
+    resetFlow();
+}
 
 // --- NAVIGATION ---
 function switchTab(tabId, btn) {
@@ -812,8 +915,8 @@ function processPayment() {
         status: 'completed'
     };
     
-    sales.unshift(sale);
-    saveSales();
+    lastSale = sale;
+    saveSales(sale);
     
     // Show ticket
     document.getElementById('ticket-date').innerText = new Date().toLocaleString('es-AR');
@@ -882,9 +985,7 @@ function anularVenta(id) {
         let sale = sales.find(s => s.id === id);
         if (sale) {
             sale.status = 'cancelled';
-            saveSales();
-            renderHistory();
-            renderReports();
+            saveSales(sale);
             
             let msg = document.createElement('div');
             msg.innerText = 'Venta anulada ✅';
@@ -1061,7 +1162,7 @@ function saveSettings() {
 }
 
 function shareWhatsApp() {
-    let sale = sales[0];
+    let sale = lastSale || sales[0];
     if (!sale) return;
     
     let text = `🍕 *Locos x la Pizza*\n📅 ${new Date(sale.date).toLocaleString('es-AR')}\n─────────────────\n`;
