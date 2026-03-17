@@ -30,9 +30,9 @@
             --border: #333333;
         }
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Poppins', sans-serif; }
-        body { background-color: var(--bg-dark); color: var(--text-light); display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+        body { background-color: var(--bg-dark); color: var(--text-light); display: flex; flex-direction: column; min-height: 100vh; overflow-x: hidden; }
         header { background-color: var(--primary); padding: 10px 15px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 4px 6px rgba(0,0,0,0.3); z-index: 70; position: sticky; top: 0; }
-        h1 { font-size: 28px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; font-style: italic; text-shadow: 2px 2px 4px rgba(0,0,0,0.5); }
+        h1 { font-size: 20px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; font-style: italic; text-shadow: 2px 2px 4px rgba(0,0,0,0.5); }
         nav button { background: none; border: none; color: white; font-size: 16px; margin-left: 20px; cursor: pointer; opacity: 0.7; transition: 0.3s; font-weight: 600; }
         nav button.active, nav button:hover { opacity: 1; text-shadow: 0 0 10px rgba(255,255,255,0.5); }
         .container { flex: 1; display: flex; overflow: hidden; }
