@@ -1277,46 +1277,10 @@ function changeEmpSplit(type, delta) {
 
 // --- ORDER MANAGEMENT ---
 function addPizzaToOrder(price, desc) {
-    // Armar desglose de precios por variedad
-    let breakdown = [];
-    let s = flowState.selections.map(i => db.pizzas[i]);
-
-    if (flowState.size === 'p4') {
-        breakdown = [`${s[0].name}: ${formatMoney(s[0].p4)}`];
-    } else if (flowState.size === 'p8') {
-        if (flowState.numVarieties === 1) {
-            breakdown = [`${s[0].name}: ${formatMoney(s[0].p8)}`];
-        } else {
-            breakdown = s.map(v => v ? `${v.name} (mitad): ${formatMoney(v.p4)}` : '').filter(Boolean);
-        }
-    } else if (flowState.size === 'p18') {
-        if (flowState.numVarieties === 1) {
-            breakdown = [`${s[0].name}: ${formatMoney(s[0].p18)}`];
-        } else {
-            breakdown = s.map(v => v ? `${v.name} (mitad): ${formatMoney(v.p8)}` : '').filter(Boolean);
-        }
-    } else if (flowState.size === 'p36') {
-        if (flowState.numVarieties === 1) {
-            breakdown = [`${s[0].name}: ${formatMoney(s[0].p36)}`];
-        } else if (flowState.numVarieties === 2) {
-            breakdown = s.map(v => v ? `${v.name} (mitad): ${formatMoney(v.p18)}` : '').filter(Boolean);
-        } else if (flowState.numVarieties === 3) {
-            let d = flowState.doubleVariety;
-            let others = s.filter((_, idx) => idx !== d);
-            breakdown = [
-                `${s[d].name} (2 cuartos): ${formatMoney(s[d].p18)}`,
-                ...others.map(v => v ? `${v.name} (1 cuarto): ${formatMoney(v.p8)}` : '').filter(Boolean)
-            ];
-        } else if (flowState.numVarieties === 4) {
-            breakdown = s.map(v => v ? `${v.name} (cuarto): ${formatMoney(v.p8)}` : '').filter(Boolean);
-        }
-    }
-
     currentOrder.push({
         type: 'pizza',
         title: `Pizza ${flowState.sizeName}`,
         desc: desc,
-        breakdown: breakdown,
         qty: flowState.qty,
         unitPrice: price,
         subtotal: price * flowState.qty
@@ -1525,10 +1489,7 @@ async function processPayment() {
                 <span>${formatMoney(item.subtotal)}</span>
             </div>
             ${item.qty > 1 ? `<div style="font-size:11px; color:#888; margin-top:-4px; margin-bottom:2px; text-align:right;">c/u ${formatMoney(item.unitPrice)}</div>` : ''}
-            ${item.breakdown && item.breakdown.length > 1 ? 
-                item.breakdown.map(b => `<div style="font-size:11px; color:#888; margin-left:10px; line-height:1.6;">• ${b}</div>`).join('') 
-                : (item.desc ? `<div style="font-size:12px; color:#666; margin-bottom:5px;">${item.desc}</div>` : '')
-            }
+            ${item.desc ? `<div style="font-size:12px; color:#666; margin-bottom:5px;">${item.desc}</div>` : ''}
         `).join('');
         document.getElementById('ticket-total-amount').innerText = formatMoney(total);
         document.getElementById('ticket-payment').innerText = `Pago: ${paymentMethod}`;
@@ -2063,35 +2024,96 @@ function printTicket() {
                     letter-spacing: 2px;
                     color: #000;
                 }
+
+                /* ── ENCABEZADO ── */
                 .ticket-header {
                     text-align: center;
-                    border-bottom: 1px dashed #000;
+                    border-bottom: 2px dashed #000;
                     padding-bottom: 6px;
                     margin-bottom: 8px;
                 }
                 .ticket-header h2 {
-                    font-size: 15px;
+                    font-size: 16px;
                     font-weight: bold;
                     text-transform: uppercase;
                     font-style: normal;
                     color: #000;
                 }
                 .ticket-header p { font-size: 11px; margin-top: 2px; color: #000; }
+
+                /* ── NUMERO DE TICKET: grande y negrita ── */
+                .ticket-header p:last-child {
+                    font-size: 18px !important;
+                    font-weight: bold !important;
+                    margin-top: 6px !important;
+                    letter-spacing: 1px;
+                }
+
+                /* ── ITEMS: linea principal con tipo y cantidad ── */
+                .ticket-item {
+                    display: flex;
+                    justify-content: space-between;
+                    font-size: 16px !important;
+                    font-weight: bold !important;
+                    text-transform: uppercase !important;
+                    margin-top: 8px;
+                    margin-bottom: 2px;
+                    line-height: 1.4;
+                }
+
+                /* ── DESGLOSE DE VARIEDADES: grande, negrita, mayuscula ── */
+                .ticket-copy div[style*="margin-left:10px"],
+                .ticket-copy div[style*="margin-left: 10px"] {
+                    font-size: 15px !important;
+                    font-weight: bold !important;
+                    text-transform: uppercase !important;
+                    color: #000 !important;
+                    line-height: 1.8 !important;
+                    margin-left: 0 !important;
+                }
+
+                /* ── DESC simple (cuando hay 1 variedad) ── */
+                .ticket-copy div[style*="font-size:12px"],
+                .ticket-copy div[style*="font-size: 12px"] {
+                    font-size: 15px !important;
+                    font-weight: bold !important;
+                    text-transform: uppercase !important;
+                    color: #000 !important;
+                }
+
+                /* ── TOTAL ── */
                 .ticket-total {
                     display: flex;
                     justify-content: space-between;
                     font-weight: bold;
-                    font-size: 14px;
-                    border-top: 1px dashed #000;
+                    font-size: 15px;
+                    border-top: 2px dashed #000;
                     padding-top: 6px;
-                    margin-top: 6px;
+                    margin-top: 8px;
                     color: #000;
                 }
-                #ticket-customer-info { font-size: 11px; margin-bottom: 8px; line-height: 1.6; color: #000; }
-                #ticket-items { margin-bottom: 8px; font-size: 11px; line-height: 1.7; color: #000; }
-                #ticket-payment { font-size: 11px; text-align: right; margin-top: 4px; color: #000; }
+
+                /* ── INFO CLIENTE: tamaño normal ── */
+                #ticket-customer-info {
+                    font-size: 11px;
+                    margin-bottom: 8px;
+                    line-height: 1.6;
+                    color: #000;
+                }
+
+                /* ── PRECIO UNITARIO (c/u): chico, no es para cocina ── */
+                .ticket-copy div[style*="text-align:right"],
+                .ticket-copy div[style*="text-align: right"] {
+                    font-size: 10px !important;
+                    font-weight: normal !important;
+                    text-transform: none !important;
+                }
+
+                #ticket-payment { font-size: 11px; text-align: right; margin-top: 4px; }
+
                 * { color: #000 !important; background: transparent !important;
-                    text-shadow: none !important; box-shadow: none !important; border-color: #000 !important; }
+                    text-shadow: none !important; box-shadow: none !important; }
+
                 @media print {
                     @page { margin: 0; size: 80mm auto; }
                     body { width: 80mm; }
