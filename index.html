@@ -589,6 +589,7 @@ function logout() {
 }
 
 let userRole = null;
+let userName = null;
 
 auth.onAuthStateChanged(async user => {
     if (user) {
@@ -596,12 +597,15 @@ auth.onAuthStateChanged(async user => {
             const userDoc = await firestore.collection('users').doc(user.uid).get();
             if (userDoc.exists) {
                 userRole = userDoc.data().role;
+                userName = userDoc.data().name || user.email;
             } else {
                 userRole = 'cajero';
+                userName = user.email;
             }
         } catch (e) {
             console.error("Error fetching user role:", e);
             userRole = 'cajero';
+            userName = user.email;
         }
         
         renderNavigation();
@@ -650,8 +654,23 @@ function renderNavigation() {
         }
     });
     
-    desktopHtml += `<button onclick="logout()" style="color: var(--danger);">🚪 Salir</button>`;
-    mobileHtml += `<button onclick="logout()" style="color: var(--danger);">🚪 <span>Salir</span></button>`;
+    desktopHtml += `
+    <span style="color:white; font-size:13px; opacity:0.85; margin-right:5px;">
+        👤 ${userName || ''}
+        <span style="font-size:11px; background:rgba(255,255,255,0.2); padding:2px 6px; border-radius:10px; margin-left:4px;">
+            ${userRole === 'admin' ? '⭐ Admin' : '🍕 Cajero'}
+        </span>
+    </span>
+    <button onclick="logout()" style="color: var(--danger);">🚪 Salir</button>
+`;
+mobileHtml += `<button onclick="logout()" style="color: var(--danger);">🚪 <span>Salir</span></button>`;
+```
+
+---
+
+Con esto en **desktop** se ve algo así en el header:
+```
+👤 Juan  ⭐ Admin    🚪 Salir
     
     document.getElementById('desktop-nav').innerHTML = desktopHtml;
     document.getElementById('mobile-nav').innerHTML = mobileHtml;
