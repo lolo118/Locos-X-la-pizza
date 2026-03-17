@@ -1716,20 +1716,84 @@ function renderReports() {
 
 // --- SETTINGS ---
 function openSettings() {
+    let pizzaRows = db.pizzas.map((p, i) => `
+        <tr>
+            <td style="padding: 6px 8px; color: white; font-size: 13px;">${p.name}</td>
+            <td><input type="number" value="${p.p4}" id="pp4_${i}" style="width:80px; padding:4px; background:#333; border:1px solid #555; color:white; border-radius:4px; font-size:13px;"></td>
+            <td><input type="number" value="${p.p8}" id="pp8_${i}" style="width:80px; padding:4px; background:#333; border:1px solid #555; color:white; border-radius:4px; font-size:13px;"></td>
+            <td><input type="number" value="${p.p18}" id="pp18_${i}" style="width:80px; padding:4px; background:#333; border:1px solid #555; color:white; border-radius:4px; font-size:13px;"></td>
+            <td><input type="number" value="${p.p36}" id="pp36_${i}" style="width:80px; padding:4px; background:#333; border:1px solid #555; color:white; border-radius:4px; font-size:13px;"></td>
+        </tr>
+    `).join('');
+
     let html = `
-        <h3 style="margin-top:10px; color:#aaa;">Empanadas</h3>
+        <h3 style="margin-bottom: 10px; color: var(--primary);">🍕 Pizzas</h3>
+        <div style="overflow-x: auto;">
+            <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+                <thead>
+                    <tr style="color: var(--text-muted); border-bottom: 1px solid #444;">
+                        <th style="padding: 6px 8px; text-align: left;">Variedad</th>
+                        <th style="padding: 6px 8px;">4 Porc.</th>
+                        <th style="padding: 6px 8px;">8 Porc.</th>
+                        <th style="padding: 6px 8px;">18 Porc.</th>
+                        <th style="padding: 6px 8px;">36 Porc.</th>
+                    </tr>
+                </thead>
+                <tbody>${pizzaRows}</tbody>
+            </table>
+        </div>
+
+        <h3 style="margin-top: 25px; margin-bottom: 10px; color: var(--primary);">🥟 Empanadas</h3>
         <div class="settings-group">
-            <label>Unidad</label><input type="number" id="set-emp-u" value="${db.empanadas.unidad}">
-            <label>Media Docena</label><input type="number" id="set-emp-m" value="${db.empanadas.media}">
-            <label>Docena</label><input type="number" id="set-emp-d" value="${db.empanadas.docena}">
+            <label>Unidad</label>
+            <input type="number" id="set-emp-u" value="${db.empanadas.unidad}" style="width:120px;">
+            <label style="margin-top:8px;">Media Docena</label>
+            <input type="number" id="set-emp-m" value="${db.empanadas.media}" style="width:120px;">
+            <label style="margin-top:8px;">Docena</label>
+            <input type="number" id="set-emp-d" value="${db.empanadas.docena}" style="width:120px;">
         </div>
     `;
-    
+
     document.getElementById('settings-form').innerHTML = html;
     document.getElementById('settings-modal').classList.add('active');
 }
 
 function closeSettings() {
+    document.getElementById('settings-modal').classList.remove('active');
+}
+
+function saveSettings() {
+    // Guardar precios de pizzas
+    db.pizzas.forEach((p, i) => {
+        const v4  = parseInt(document.getElementById(`pp4_${i}`)?.value);
+        const v8  = parseInt(document.getElementById(`pp8_${i}`)?.value);
+        const v18 = parseInt(document.getElementById(`pp18_${i}`)?.value);
+        const v36 = parseInt(document.getElementById(`pp36_${i}`)?.value);
+        if (!isNaN(v4))  p.p4  = v4;
+        if (!isNaN(v8))  p.p8  = v8;
+        if (!isNaN(v18)) p.p18 = v18;
+        if (!isNaN(v36)) p.p36 = v36;
+    });
+
+    // Guardar precios de empanadas
+    const eu = parseInt(document.getElementById('set-emp-u').value);
+    const em = parseInt(document.getElementById('set-emp-m').value);
+    const ed = parseInt(document.getElementById('set-emp-d').value);
+    if (!isNaN(eu)) db.empanadas.unidad = eu;
+    if (!isNaN(em)) db.empanadas.media  = em;
+    if (!isNaN(ed)) db.empanadas.docena = ed;
+
+    saveDB();
+    closeSettings();
+    if (flowState.category) resetFlow();
+    
+    // Mostrar confirmación
+    const msg = document.createElement('div');
+    msg.innerText = '✅ Precios actualizados';
+    msg.style.cssText = 'position:fixed; bottom:80px; right:20px; background:var(--success); color:white; padding:12px 20px; border-radius:8px; font-weight:bold; z-index:9999; box-shadow:0 4px 6px rgba(0,0,0,0.3);';
+    document.body.appendChild(msg);
+    setTimeout(() => msg.remove(), 3000);
+} {
     document.getElementById('settings-modal').classList.remove('active');
 }
 
