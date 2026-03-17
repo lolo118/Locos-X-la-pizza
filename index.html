@@ -250,6 +250,22 @@
 <div class="container">
     <!-- CAJA SECTION -->
     <div id="caja" class="section active">
+
+        <!-- Banner de estado del turno -->
+        <div id="turno-banner" style="width:100%; padding:10px 16px; display:flex; justify-content:space-between; align-items:center; flex-shrink:0; border-bottom:1px solid #333;">
+            <div id="turno-info" style="font-size:13px; color:var(--text-muted);">Sin turno abierto</div>
+            <div style="display:flex; gap:8px;">
+                <button id="btn-abrir-turno" onclick="abrirTurno()"
+                    style="padding:6px 14px; background:var(--success); color:white; border:none; border-radius:6px; font-size:13px; font-weight:bold; cursor:pointer;">
+                    🟢 Abrir turno
+                </button>
+                <button id="btn-cerrar-turno" onclick="cerrarTurno()"
+                    style="padding:6px 14px; background:#c0392b; color:white; border:none; border-radius:6px; font-size:13px; font-weight:bold; cursor:pointer; display:none;">
+                    🔴 Cerrar turno
+                </button>
+            </div>
+        </div>
+
         <div class="left-panel" id="flow-container">
             <!-- Flow content injected via JS -->
         </div>
@@ -308,10 +324,14 @@
     <!-- Filtros -->
     <div style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:20px; align-items:center;">
         <select id="rep-filter-date" style="padding:8px; background:#333; color:white; border:1px solid #555; border-radius:4px;" onchange="renderReports()">
-            <option value="today">Hoy</option>
+            <option value="turno-actual">🟢 Turno actual</option>
+            <option value="today">Hoy (por fecha)</option>
             <option value="week">Esta semana</option>
             <option value="month">Este mes</option>
             <option value="all">Todo histórico</option>
+        </select>
+        <select id="rep-filter-turno" style="padding:8px; background:#333; color:white; border:1px solid #555; border-radius:4px;" onchange="renderReports()">
+            <option value="all-turnos">Todos los turnos</option>
         </select>
         <select id="rep-filter-branch" style="padding:8px; background:#333; color:white; border:1px solid #555; border-radius:4px;" onchange="renderReports()">
             <option value="all">Ambas sucursales</option>
@@ -420,8 +440,7 @@
             <button class="btn-action" style="flex:1; background:#333; font-size:16px; padding:15px;" onclick="printTicket()">🖨️ Imprimir</button>
             <button class="btn-action" style="flex:1; background:#25D366; font-size:16px; padding:15px;" onclick="shareWhatsApp()">📲 WhatsApp</button>
         </div>
-        <button class="btn-action" style="margin-top:10px; background:#555;" onclick="editFromTicket()">✏️ Modificar pedido</button>
-        <button class="btn-action" style="margin-top: 8px;" onclick="closeTicket()">NUEVA ORDEN</button>
+        <button class="btn-action" style="margin-top: 10px;" onclick="closeTicket()">NUEVA ORDEN</button>
     </div>
 </div>
 
@@ -528,6 +547,7 @@ let currentOrder = [];
 let flowState = { step: 0, category: null, size: null, numVarieties: 1, selections: [], doubleVariety: null, qty: 1, empSplit: { carne: 0, pollo: 0 }, ketoDough: null };
 let paymentMethod = 'Efectivo';
 let lastSale = null;
+let currentTurno = null; // turno activo de caja
 let orderMetadata = { orderNumber: null, orderType: null, customerName: null, customerPhone: null, customerAddress: null };
 
 // --- UTILS ---
@@ -725,6 +745,7 @@ async function loadBranchData() {
             });
             
         resetFlow();
+        await cargarTurnoActivo();
     } catch (e) {
         console.error("Error loading branch data:", e);
         showDialog('Error', 'Error al cargar los datos de la sucursal.', [{ text: 'OK', action: closeDialog }]);
@@ -741,6 +762,136 @@ function switchTab(tabId, btn) {
     if(btn) btn.classList.add('active');
     if (tabId === 'historial') renderHistory();
     if (tabId === 'reportes') renderReports();
+}
+
+// --- TURNO DE CAJA ---
+async function cargarTurnoActivo() {
+    try {
+        const snap = await firestore.collection('turnos')
+            .where('branch', '==', currentBranch)
+            .where('status', '==', 'abierto')
+            .orderBy('openedAt', 'desc')
+            .limit(1)
+            .get();
+
+        if (!snap.empty) {
+            currentTurno = snap.docs[0].data();
+            currentTurno.id = snap.docs[0].id;
+            actualizarBannerTurno();
+            await cargarTurnosEnFiltro();
+        } else {
+            currentTurno = null;
+            actualizarBannerTurno();
+        }
+    } catch(e) {
+        console.error('Error cargando turno:', e);
+    }
+}
+
+async function cargarTurnosEnFiltro() {
+    try {
+        const snap = await firestore.collection('turnos')
+            .where('branch', '==', currentBranch)
+            .orderBy('openedAt', 'desc')
+            .limit(30)
+            .get();
+
+        const select = document.getElementById('rep-filter-turno');
+        if (!select) return;
+        select.innerHTML = '<option value="all-turnos">Todos los turnos</option>';
+        snap.docs.forEach(doc => {
+            const t = doc.data();
+            const fecha = new Date(t.openedAt).toLocaleDateString('es-AR');
+            const hora  = new Date(t.openedAt).toLocaleTimeString('es-AR', {hour:'2-digit', minute:'2-digit'});
+            const estado = t.status === 'abierto' ? '🟢' : '🔴';
+            const opt = document.createElement('option');
+            opt.value = doc.id;
+            opt.textContent = `${estado} ${fecha} ${hora}`;
+            select.appendChild(opt);
+        });
+    } catch(e) {
+        console.error('Error cargando turnos:', e);
+    }
+}
+
+function actualizarBannerTurno() {
+    const infoEl   = document.getElementById('turno-info');
+    const btnAbrir = document.getElementById('btn-abrir-turno');
+    const btnCerrar= document.getElementById('btn-cerrar-turno');
+    if (!infoEl) return;
+
+    if (currentTurno) {
+        const desde = new Date(currentTurno.openedAt).toLocaleTimeString('es-AR', {hour:'2-digit', minute:'2-digit'});
+        const fecha = new Date(currentTurno.openedAt).toLocaleDateString('es-AR');
+        infoEl.innerHTML = `<span style="color:var(--success); font-weight:bold;">🟢 Turno abierto</span> &nbsp;·&nbsp; Desde: ${fecha} ${desde} &nbsp;·&nbsp; Por: ${currentTurno.openedBy || ''}`;
+        if (btnAbrir)  btnAbrir.style.display  = 'none';
+        if (btnCerrar) btnCerrar.style.display = 'inline-block';
+    } else {
+        infoEl.innerHTML = `<span style="color:#e74c3c; font-weight:bold;">🔴 Sin turno abierto</span> &nbsp;·&nbsp; <span style="color:var(--text-muted);">Abrí el turno para empezar a cobrar</span>`;
+        if (btnAbrir)  btnAbrir.style.display  = 'inline-block';
+        if (btnCerrar) btnCerrar.style.display = 'none';
+    }
+}
+
+async function abrirTurno() {
+    showLoading('Abriendo turno...');
+    try {
+        const nuevoTurno = {
+            branch: currentBranch,
+            openedAt: new Date().toISOString(),
+            openedBy: userName || 'Usuario',
+            status: 'abierto',
+            closedAt: null,
+            closedBy: null
+        };
+        const docRef = await firestore.collection('turnos').add(nuevoTurno);
+        currentTurno = { ...nuevoTurno, id: docRef.id };
+        actualizarBannerTurno();
+        await cargarTurnosEnFiltro();
+        updateOrder(); // refresca el estado del botón COBRAR
+    } catch(e) {
+        console.error('Error abriendo turno:', e);
+        showDialog('Error', 'No se pudo abrir el turno. Intentá de nuevo.', [{text:'OK', action:closeDialog}]);
+    } finally {
+        hideLoading();
+    }
+}
+
+async function cerrarTurno() {
+    const totalTurno = sales
+        .filter(s => s.status === 'completed' && s.turnoId === currentTurno?.id)
+        .reduce((sum, s) => sum + s.total, 0);
+
+    showDialog(
+        '🔴 Cerrar turno',
+        `¿Confirmás el cierre del turno?
+
+Total recaudado en este turno: ${formatMoney(totalTurno)}`,
+        [
+            { text: 'Cancelar', action: closeDialog, style: 'background:#555;' },
+            { text: 'Sí, cerrar turno', action: async () => {
+                closeDialog();
+                showLoading('Cerrando turno...');
+                try {
+                    await firestore.collection('turnos').doc(currentTurno.id).update({
+                        status: 'cerrado',
+                        closedAt: new Date().toISOString(),
+                        closedBy: userName || 'Usuario',
+                        totalRecaudado: totalTurno
+                    });
+                    currentTurno = null;
+                    actualizarBannerTurno();
+                    await cargarTurnosEnFiltro();
+                    updateOrder();
+                    showDialog('✅ Turno cerrado', `Total recaudado: ${formatMoney(totalTurno)}`, [{text:'OK', action:closeDialog}]);
+                } catch(e) {
+                    showDialog('Error', 'No se pudo cerrar el turno.', [{text:'OK', action:closeDialog}]);
+                } finally {
+                    hideLoading();
+                }
+            }}
+        ]
+    );
 }
 
 // --- FLOW ENGINE ---
@@ -1317,36 +1468,18 @@ function addEmpanadaPack() {
     resetFlow();
 }
 
-function editFromTicket() {
-    document.getElementById('ticket-modal').classList.remove('active');
-    // Anular la venta guardada para evitar duplicado cuando se vuelva a cobrar
-    if (lastSale) {
-        firestore.collection('branches').doc(currentBranch).collection('sales')
-            .doc(lastSale.id).update({ status: 'cancelled' })
-            .catch(e => console.warn('No se pudo anular la venta previa:', e));
-        lastSale = null;
-    }
-    // Volver al paso 1 manteniendo items y datos del cliente
-    flowState.step = 1;
-    flowState.category = null;
-    flowState.size = null;
-    flowState.sizeName = null;
-    flowState.selections = [];
-    flowState.numVarieties = null;
-    flowState.doubleVariety = null;
-    flowState.qty = 1;
-    flowState.notes = '';
-    renderFlow();
-    const flowContainer = document.getElementById('flow-container');
-    if (flowContainer) flowContainer.scrollTop = 0;
-}
-
 function removeOrderItem(idx) {
     currentOrder.splice(idx, 1);
     updateOrder();
 }
 
 function updateOrder() {
+    // Bloquear cobro si no hay turno abierto
+    const btnCobrar = document.getElementById('btn-cobrar');
+    if (btnCobrar && !currentTurno) {
+        btnCobrar.disabled = true;
+        btnCobrar.title = 'Abrí el turno antes de cobrar';
+    }
     const headerContainer = document.getElementById('order-header-container');
     if (orderMetadata.orderType) {
         let badgeHtml = '';
@@ -1467,7 +1600,8 @@ async function processPayment() {
         orderType: orderMetadata.orderType,
         customerName: orderMetadata.customerName,
         customerPhone: orderMetadata.customerPhone,
-        customerAddress: orderMetadata.customerAddress
+        customerAddress: orderMetadata.customerAddress,
+        turnoId: currentTurno ? currentTurno.id : null
     };
     
     showLoading('Procesando pago...');
@@ -1683,10 +1817,17 @@ function renderReports() {
         start = new Date(now.getFullYear(), now.getMonth(), 1);
     }
 
+    const turnoFilter = document.getElementById('rep-filter-turno')?.value || 'all-turnos';
+
     let validSales = sales.filter(s => {
         if (s.status !== 'completed') return false;
+        if (filter === 'turno-actual') {
+            if (!currentTurno) return false;
+            return s.turnoId === currentTurno.id;
+        }
         if (new Date(s.date) < start) return false;
         if (branchFilter !== 'all' && s.branch !== branchFilter) return false;
+        if (turnoFilter !== 'all-turnos' && s.turnoId !== turnoFilter) return false;
         return true;
     });
 
