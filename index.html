@@ -194,9 +194,25 @@
         .form-input { width: 100%; padding: 15px; background: #333; border: 1px solid #444; color: white; border-radius: 8px; font-size: 16px; }
         .form-input.error { border-color: var(--danger); background: rgba(231, 76, 60, 0.1); }
         
+        /* Wrapper interno de caja: column para el banner + row para el contenido */
+        .caja-wrapper {
+            display: flex;
+            flex-direction: column;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+        }
+        .caja-content {
+            display: flex;
+            flex-direction: column;
+            flex: 1;
+            overflow: hidden;
+        }
+
         @media (min-width: 768px) {
             .container { flex-direction: row; }
-            #caja { flex-direction: row; padding-bottom: 20px; }
+            #caja { flex-direction: column; padding-bottom: 20px; padding-top: 0; }
+            .caja-content { flex-direction: row; }
             .left-panel { flex: 1; padding: 20px; }
             .right-panel { 
                 position: relative; 
@@ -251,21 +267,24 @@
     <!-- CAJA SECTION -->
     <div id="caja" class="section active">
 
-        <!-- Banner de estado del turno -->
-        <div id="turno-banner" style="width:100%; padding:10px 16px; display:flex; justify-content:space-between; align-items:center; flex-shrink:0; border-bottom:1px solid #333;">
-            <div id="turno-info" style="font-size:13px; color:var(--text-muted);">Sin turno abierto</div>
-            <div style="display:flex; gap:8px;">
-                <button id="btn-abrir-turno" onclick="abrirTurno()"
-                    style="padding:6px 14px; background:var(--success); color:white; border:none; border-radius:6px; font-size:13px; font-weight:bold; cursor:pointer;">
-                    🟢 Abrir turno
-                </button>
-                <button id="btn-cerrar-turno" onclick="cerrarTurno()"
-                    style="padding:6px 14px; background:#c0392b; color:white; border:none; border-radius:6px; font-size:13px; font-weight:bold; cursor:pointer; display:none;">
-                    🔴 Cerrar turno
-                </button>
+        <div class="caja-wrapper">
+            <!-- Banner de estado del turno -->
+            <div id="turno-banner" style="padding:8px 16px; display:flex; justify-content:space-between; align-items:center; flex-shrink:0; border-bottom:1px solid #333; background:var(--bg-dark);">
+                <div id="turno-info" style="font-size:13px; color:var(--text-muted);">Sin turno abierto</div>
+                <div style="display:flex; gap:8px;">
+                    <button id="btn-abrir-turno" onclick="abrirTurno()"
+                        style="padding:5px 12px; background:var(--success); color:white; border:none; border-radius:6px; font-size:12px; font-weight:bold; cursor:pointer;">
+                        🟢 Abrir turno
+                    </button>
+                    <button id="btn-cerrar-turno" onclick="cerrarTurno()"
+                        style="padding:5px 12px; background:#c0392b; color:white; border:none; border-radius:6px; font-size:12px; font-weight:bold; cursor:pointer; display:none;">
+                        🔴 Cerrar turno
+                    </button>
+                </div>
             </div>
-        </div>
 
+            <!-- Contenido principal de caja -->
+            <div class="caja-content">
         <div class="left-panel" id="flow-container">
             <!-- Flow content injected via JS -->
         </div>
@@ -291,6 +310,8 @@
                 <button class="btn-action" id="btn-cobrar" style="flex: 2;" onclick="processPayment()" disabled>COBRAR</button>
             </div>
         </div>
+            </div><!-- fin caja-content -->
+        </div><!-- fin caja-wrapper -->
     </div>
 
     <!-- HISTORIAL SECTION -->
@@ -767,24 +788,26 @@ function switchTab(tabId, btn) {
 // --- TURNO DE CAJA ---
 async function cargarTurnoActivo() {
     try {
+        // Usamos solo branch + orderBy para no necesitar índice compuesto con status
         const snap = await firestore.collection('turnos')
             .where('branch', '==', currentBranch)
-            .where('status', '==', 'abierto')
             .orderBy('openedAt', 'desc')
-            .limit(1)
+            .limit(10)
             .get();
 
-        if (!snap.empty) {
-            currentTurno = snap.docs[0].data();
-            currentTurno.id = snap.docs[0].id;
-            actualizarBannerTurno();
-            await cargarTurnosEnFiltro();
+        // Filtramos en JS el turno abierto más reciente
+        const abierto = snap.docs.find(d => d.data().status === 'abierto');
+        if (abierto) {
+            currentTurno = abierto.data();
+            currentTurno.id = abierto.id;
         } else {
             currentTurno = null;
-            actualizarBannerTurno();
         }
+        actualizarBannerTurno();
+        await cargarTurnosEnFiltro();
     } catch(e) {
         console.error('Error cargando turno:', e);
+        actualizarBannerTurno();
     }
 }
 
