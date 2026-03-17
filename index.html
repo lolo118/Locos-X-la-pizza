@@ -295,20 +295,38 @@
             <div class="total-display">Total: $<span id="order-total">0</span></div>
             
             <div class="payment-methods" id="payment-methods">
-                <button class="pay-btn selected" onclick="setPayment('Efectivo', this)">💵 Efectivo</button>
+                <button class="pay-btn selected" id="pay-btn-efectivo" onclick="setPayment('Efectivo', this)">💵 Efectivo</button>
                 <button class="pay-btn" onclick="setPayment('Transferencia', this)">📱 Transf.</button>
                 <button class="pay-btn" onclick="setPayment('Tarjeta', this)">💳 Tarjeta</button>
+                <button class="pay-btn" id="pay-btn-mixto" onclick="setPayment('Mixto', this)">💵+📱 Mixto</button>
             </div>
-            
+
             <div class="cash-input active" id="cash-input-container">
                 <input type="number" id="cash-received" placeholder="Monto recibido $" oninput="calculateChange()">
                 <div class="change-display" id="change-display">Vuelto: $0</div>
             </div>
-            
-            <div style="display: flex; gap: 10px;">
-                <button class="btn-action" style="background: var(--danger); flex: 1;" onclick="cancelOrder()">CANCELAR</button>
-                <button class="btn-action" id="btn-cobrar" style="flex: 2;" onclick="processPayment()" disabled>COBRAR</button>
+
+            <div id="mixed-payment-container" style="display:none; background:#2a2a2a; border-radius:8px; padding:12px; margin-bottom:8px;">
+                <div style="font-size:13px; color:var(--text-muted); margin-bottom:8px;">Dividir el pago:</div>
+                <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
+                    <span style="font-size:13px; min-width:80px;">💵 Efectivo</span>
+                    <input type="number" id="mixed-cash" placeholder="$0" oninput="calculateMixed()"
+                        style="flex:1; padding:8px; background:#333; border:1px solid #555; color:white; border-radius:6px; font-size:14px;">
+                </div>
+                <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
+                    <span style="font-size:13px; min-width:80px;">📱 Transf.</span>
+                    <input type="number" id="mixed-transfer" placeholder="$0" oninput="calculateMixed()"
+                        style="flex:1; padding:8px; background:#333; border:1px solid #555; color:white; border-radius:6px; font-size:14px;">
+                </div>
+                <div id="mixed-status" style="font-size:13px; text-align:right; color:var(--text-muted);"></div>
+                <div id="mixed-change" style="font-size:18px; font-weight:bold; text-align:right; color:var(--success); margin-top:4px;"></div>
             </div>
+
+            <div style="display:flex; gap:8px; margin-bottom:8px;">
+                <button class="btn-action" style="background:#555; flex:1; font-size:13px; padding:10px;" onclick="editOrder()">✏️ Modificar</button>
+                <button class="btn-action" style="background:var(--danger); flex:1; font-size:13px; padding:10px;" onclick="cancelOrder()">✕ Cancelar</button>
+            </div>
+            <button class="btn-action" id="btn-cobrar" style="width:100%;" onclick="processPayment()" disabled>COBRAR</button>
         </div>
             </div><!-- fin caja-content -->
         </div><!-- fin caja-wrapper -->
@@ -461,7 +479,8 @@
             <button class="btn-action" style="flex:1; background:#333; font-size:16px; padding:15px;" onclick="printTicket()">🖨️ Imprimir</button>
             <button class="btn-action" style="flex:1; background:#25D366; font-size:16px; padding:15px;" onclick="shareWhatsApp()">📲 WhatsApp</button>
         </div>
-        <button class="btn-action" style="margin-top: 10px;" onclick="closeTicket()">NUEVA ORDEN</button>
+        <button class="btn-action" style="margin-top:10px; background:#555;" onclick="editFromTicket()">✏️ Modificar pedido</button>
+        <button class="btn-action" style="margin-top:8px;" onclick="closeTicket()">NUEVA ORDEN</button>
     </div>
 </div>
 
@@ -567,6 +586,8 @@ let currentBranch = 'sucursal1';
 let currentOrder = [];
 let flowState = { step: 0, category: null, size: null, numVarieties: 1, selections: [], doubleVariety: null, qty: 1, empSplit: { carne: 0, pollo: 0 }, ketoDough: null };
 let paymentMethod = 'Efectivo';
+let mixedCash = 0;
+let mixedTransfer = 0;
 let lastSale = null;
 let currentTurno = null; // turno activo de caja
 let orderMetadata = { orderNumber: null, orderType: null, customerName: null, customerPhone: null, customerAddress: null };
@@ -1221,6 +1242,10 @@ function renderFlow() {
                     <div class="qty-display">${flowState.qty}</div>
                     <button class="qty-btn" onclick="changeQty(1)">+</button>
                 </div>
+                <div style="margin-top:15px;">
+                    <label style="display:block; color:var(--text-muted); font-size:13px; margin-bottom:6px;">📝 Aclaraciones / Pedido especial (opcional)</label>
+                    <textarea id="pizza-notes" rows="2" placeholder="Ej: sin ajo, sin aceitunas, bien cocida..." style="width:100%; padding:10px; background:#333; border:1px solid #555; color:white; border-radius:8px; font-size:14px; font-family:inherit; resize:none;">${flowState.notes || ''}</textarea>
+                </div>
                 <button class="btn-action" onclick="addPizzaToOrder(${price}, '${desc}')">AGREGAR A LA ORDEN</button>
             `;
         }
@@ -1298,6 +1323,7 @@ function renderFlow() {
 }
 
 function resetFlow() {
+    flowState.notes = '';
     let initialStep = orderMetadata && orderMetadata.orderType ? 1 : 0;
     flowState = { step: initialStep, category: null, size: null, numVarieties: 1, selections: [], doubleVariety: null, qty: 1, empSplit: { carne: 0, pollo: 0 }, ketoDough: null };
     renderFlow();
@@ -1452,14 +1478,44 @@ function changeEmpSplit(type, delta) {
 
 // --- ORDER MANAGEMENT ---
 function addPizzaToOrder(price, desc) {
+    const notesEl = document.getElementById('pizza-notes');
+    const notes = notesEl ? notesEl.value.trim() : '';
+
+    // Desglose de precios por variedad
+    let breakdown = [];
+    let s = flowState.selections.map(i => db.pizzas[i]);
+    if (flowState.size === 'p4') {
+        breakdown = [`${s[0].name}: ${formatMoney(s[0].p4)}`];
+    } else if (flowState.size === 'p8') {
+        if (flowState.numVarieties === 1) breakdown = [`${s[0].name}: ${formatMoney(s[0].p8)}`];
+        else breakdown = s.map(v => v ? `${v.name} (mitad): ${formatMoney(v.p4)}` : '').filter(Boolean);
+    } else if (flowState.size === 'p18') {
+        if (flowState.numVarieties === 1) breakdown = [`${s[0].name}: ${formatMoney(s[0].p18)}`];
+        else breakdown = s.map(v => v ? `${v.name} (mitad): ${formatMoney(v.p8)}` : '').filter(Boolean);
+    } else if (flowState.size === 'p36') {
+        if (flowState.numVarieties === 1) breakdown = [`${s[0].name}: ${formatMoney(s[0].p36)}`];
+        else if (flowState.numVarieties === 2) breakdown = s.map(v => v ? `${v.name} (mitad): ${formatMoney(v.p18)}` : '').filter(Boolean);
+        else if (flowState.numVarieties === 3) {
+            let d = flowState.doubleVariety;
+            let others = s.filter((_, i) => i !== d);
+            breakdown = [`${s[d].name} (2 cuartos): ${formatMoney(s[d].p18)}`,
+                ...others.map(v => v ? `${v.name} (1 cuarto): ${formatMoney(v.p8)}` : '').filter(Boolean)];
+        } else {
+            breakdown = s.map(v => v ? `${v.name} (cuarto): ${formatMoney(v.p8)}` : '').filter(Boolean);
+        }
+    }
+
     currentOrder.push({
         type: 'pizza',
         title: `Pizza ${flowState.sizeName}`,
         desc: desc,
+        breakdown: breakdown,
+        notes: notes,
         qty: flowState.qty,
         unitPrice: price,
         subtotal: price * flowState.qty
     });
+    flowState.notes = '';
     updateOrder();
     resetFlow();
 }
@@ -1489,6 +1545,44 @@ function addEmpanadaPack() {
     });
     updateOrder();
     resetFlow();
+}
+
+function editFromTicket() {
+    document.getElementById('ticket-modal').classList.remove('active');
+    if (lastSale) {
+        firestore.collection('branches').doc(currentBranch).collection('sales')
+            .doc(lastSale.id).update({ status: 'cancelled' })
+            .catch(e => console.warn('No se pudo anular la venta previa:', e));
+        lastSale = null;
+    }
+    flowState.step = 1;
+    flowState.category = null;
+    flowState.size = null;
+    flowState.sizeName = null;
+    flowState.selections = [];
+    flowState.numVarieties = null;
+    flowState.doubleVariety = null;
+    flowState.qty = 1;
+    flowState.notes = '';
+    renderFlow();
+    const fc = document.getElementById('flow-container');
+    if (fc) fc.scrollTop = 0;
+}
+
+function editOrder() {
+    document.getElementById('right-panel').classList.remove('open');
+    flowState.step = 1;
+    flowState.category = null;
+    flowState.size = null;
+    flowState.sizeName = null;
+    flowState.selections = [];
+    flowState.numVarieties = null;
+    flowState.doubleVariety = null;
+    flowState.qty = 1;
+    flowState.notes = '';
+    renderFlow();
+    const fc = document.getElementById('flow-container');
+    if (fc) fc.scrollTop = 0;
 }
 
 function removeOrderItem(idx) {
@@ -1549,6 +1643,7 @@ function updateOrder() {
                 <div class="item-info">
                     <div class="item-title">${item.qty}x ${item.title}</div>
                     ${item.desc ? `<div class="item-desc">${item.desc}</div>` : ''}
+                    ${item.notes ? `<div style="font-size:12px; color:#f39c12; margin-top:2px;">📝 ${item.notes}</div>` : ''}
                 </div>
                 <div class="item-price">${formatMoney(item.subtotal)}</div>
                 <button class="btn-delete" onclick="removeOrderItem(${i})">✕</button>
@@ -1578,14 +1673,45 @@ function setPayment(method, btn) {
     paymentMethod = method;
     document.querySelectorAll('.pay-btn').forEach(b => b.classList.remove('selected'));
     if(btn) btn.classList.add('selected');
-    
-    const cashInput = document.getElementById('cash-input-container');
+    const cashInput  = document.getElementById('cash-input-container');
+    const mixedInput = document.getElementById('mixed-payment-container');
     if (method === 'Efectivo') {
         cashInput.classList.add('active');
+        if (mixedInput) mixedInput.style.display = 'none';
         document.getElementById('cash-received').value = '';
         document.getElementById('change-display').innerText = 'Vuelto: $0';
+    } else if (method === 'Mixto') {
+        cashInput.classList.remove('active');
+        if (mixedInput) mixedInput.style.display = 'block';
+        const mc = document.getElementById('mixed-cash');
+        const mt = document.getElementById('mixed-transfer');
+        if (mc) mc.value = '';
+        if (mt) mt.value = '';
+        calculateMixed();
     } else {
         cashInput.classList.remove('active');
+        if (mixedInput) mixedInput.style.display = 'none';
+    }
+}
+
+function calculateMixed() {
+    const total   = currentOrder.reduce((sum, item) => sum + item.subtotal, 0);
+    mixedCash     = parseFloat(document.getElementById('mixed-cash')?.value)     || 0;
+    mixedTransfer = parseFloat(document.getElementById('mixed-transfer')?.value) || 0;
+    const ingresado = mixedCash + mixedTransfer;
+    const statusEl  = document.getElementById('mixed-status');
+    const changeEl  = document.getElementById('mixed-change');
+    const btnCobrar = document.getElementById('btn-cobrar');
+    if (statusEl) statusEl.innerText = `Total: ${formatMoney(total)} / Ingresado: ${formatMoney(ingresado)}`;
+    if (ingresado >= total && (mixedCash > 0 || mixedTransfer > 0)) {
+        const vuelto = ingresado - total;
+        if (statusEl) statusEl.style.color = 'var(--success)';
+        if (changeEl) changeEl.innerText = vuelto > 0 ? `Vuelto: ${formatMoney(vuelto)}` : '';
+        if (btnCobrar && currentOrder.length > 0 && orderMetadata.orderNumber) btnCobrar.disabled = false;
+    } else {
+        if (statusEl) statusEl.style.color = 'var(--text-muted)';
+        if (changeEl) changeEl.innerText = '';
+        if (btnCobrar) btnCobrar.disabled = true;
     }
 }
 
@@ -1612,12 +1738,27 @@ async function processPayment() {
     btnCobrar.disabled = true;
     btnCobrar.innerHTML = 'Procesando... ⏳';
     
+    let cashReceived = 0, changeGiven = 0, mixedCashAmt = 0, mixedTransferAmt = 0;
+    if (paymentMethod === 'Efectivo') {
+        cashReceived = parseFloat(document.getElementById('cash-received').value) || 0;
+        changeGiven  = Math.max(0, cashReceived - total);
+    } else if (paymentMethod === 'Mixto') {
+        mixedCashAmt     = parseFloat(document.getElementById('mixed-cash').value)     || 0;
+        mixedTransferAmt = parseFloat(document.getElementById('mixed-transfer').value) || 0;
+        cashReceived     = mixedCashAmt;
+        changeGiven      = Math.max(0, (mixedCashAmt + mixedTransferAmt) - total);
+    }
+
     let sale = {
         id: orderMetadata.orderNumber,
         date: new Date().toISOString(),
         items: [...currentOrder],
         total: total,
         paymentMethod: paymentMethod,
+        mixedCash: paymentMethod === 'Mixto' ? mixedCashAmt : null,
+        mixedTransfer: paymentMethod === 'Mixto' ? mixedTransferAmt : null,
+        cashReceived: cashReceived || null,
+        changeGiven: changeGiven || null,
         status: 'completed',
         orderNumber: orderMetadata.orderNumber,
         orderType: orderMetadata.orderType,
@@ -1671,10 +1812,21 @@ async function processPayment() {
                 <span>${formatMoney(item.subtotal)}</span>
             </div>
             ${item.qty > 1 ? `<div style="font-size:11px; color:#888; margin-top:-4px; margin-bottom:2px; text-align:right;">c/u ${formatMoney(item.unitPrice)}</div>` : ''}
-            ${item.desc ? `<div style="font-size:12px; color:#666; margin-bottom:5px;">${item.desc}</div>` : ''}
+            ${item.breakdown && item.breakdown.length > 1
+                ? item.breakdown.map(b => `<div style="font-size:11px; color:#888; margin-left:10px; line-height:1.6;">• ${b}</div>`).join('')
+                : (item.desc ? `<div style="font-size:12px; color:#666; margin-bottom:5px;">${item.desc}</div>` : '')
+            }
+            ${item.notes ? `<div style="font-size:12px; color:#e67e22; font-style:italic; margin-left:10px; margin-bottom:5px;">📝 ${item.notes}</div>` : ''}
         `).join('');
         document.getElementById('ticket-total-amount').innerText = formatMoney(total);
-        document.getElementById('ticket-payment').innerText = `Pago: ${paymentMethod}`;
+        let paymentText = `Pago: ${paymentMethod}`;
+        if (paymentMethod === 'Efectivo' && cashReceived > 0) {
+            paymentText += ` | Recibido: ${formatMoney(cashReceived)} | Vuelto: ${formatMoney(changeGiven)}`;
+        } else if (paymentMethod === 'Mixto') {
+            paymentText += ` | 💵 ${formatMoney(mixedCashAmt)} + 📱 ${formatMoney(mixedTransferAmt)}`;
+            if (changeGiven > 0) paymentText += ` | Vuelto: ${formatMoney(changeGiven)}`;
+        }
+        document.getElementById('ticket-payment').innerText = paymentText;
         
         document.getElementById('ticket-modal').classList.add('active');
         document.getElementById('right-panel').classList.remove('open');
@@ -1704,6 +1856,13 @@ function closeTicket() {
     renderFlow();
     document.getElementById('cash-received').value = '';
     document.getElementById('change-display').innerText = 'Vuelto: $0';
+    const mc = document.getElementById('mixed-cash');
+    const mt = document.getElementById('mixed-transfer');
+    if (mc) mc.value = '';
+    if (mt) mt.value = '';
+    const mpc = document.getElementById('mixed-payment-container');
+    if (mpc) mpc.style.display = 'none';
+    setPayment('Efectivo', document.getElementById('pay-btn-efectivo'));
     document.getElementById('offline-banner').style.display = 'none';
 }
 
