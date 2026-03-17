@@ -591,7 +591,12 @@ function renderNavigation() {
         </select>
         <button id="installBtn" style="display: none; border: 1px solid white; border-radius: 4px; padding: 5px 10px;">📲 Instalar App</button>
     `;
-    let mobileHtml = '';
+    let mobileHtml = `
+        <select id="branch-selector-mobile" style="padding: 6px 8px; background: #333; color: white; border: 1px solid #555; border-radius: 4px; font-size: 13px; max-width: 140px;" onchange="changeBranchMobile()">
+            <option value="sucursal1">📍 PLGALLO</option>
+            <option value="sucursal2">📍 POSADAS</option>
+        </select>
+    `;
     
     tabs.forEach(tab => {
         if (tab.roles.includes(userRole)) {
@@ -612,6 +617,10 @@ function renderNavigation() {
     document.getElementById('mobile-nav').innerHTML = mobileHtml;
     
     document.getElementById('branch-selector').style.display = 'inline-block';
+document.getElementById('branch-selector').value = currentBranch;
+// Sincronizar selector mobile
+const mobSelector = document.getElementById('branch-selector-mobile');
+if (mobSelector) mobSelector.value = currentBranch;
     
     // Set active branch in selector
     document.getElementById('branch-selector').value = currentBranch;
@@ -635,6 +644,17 @@ function toggleMobileDrawer() {
 
 function changeBranch() {
     currentBranch = document.getElementById('branch-selector').value;
+    // Sincronizar con el selector mobile si existe
+    const mob = document.getElementById('branch-selector-mobile');
+    if (mob) mob.value = currentBranch;
+    loadBranchData();
+}
+
+function changeBranchMobile() {
+    currentBranch = document.getElementById('branch-selector-mobile').value;
+    // Sincronizar con el selector desktop si existe
+    const desk = document.getElementById('branch-selector');
+    if (desk) desk.value = currentBranch;
     loadBranchData();
 }
 
