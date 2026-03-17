@@ -656,35 +656,16 @@ function renderNavigation() {
         }
     });
     
-    desktopHtml += `
-    <span style="color:white; font-size:13px; opacity:0.85; margin-right:5px;">
-        👤 ${userName || ''}
-        <span style="font-size:11px; background:rgba(255,255,255,0.2); padding:2px 6px; border-radius:10px; margin-left:4px;">
-            ${userRole === 'admin' ? '⭐ Admin' : '🍕 Cajero'}
-        </span>
-    </span>
-    <button onclick="logout()" style="color: var(--danger);">🚪 Salir</button>
-`;
-mobileHtml += `<button onclick="logout()" style="color: var(--danger);">🚪 <span>Salir</span></button>`;
-```
+    desktopHtml += `<span style="color:white; font-size:13px; opacity:0.85; margin-right:5px; display:inline-flex; align-items:center; gap:6px;">👤 ${userName || ''}<span style="font-size:11px; background:rgba(255,255,255,0.2); padding:2px 7px; border-radius:10px;">${userRole === 'admin' ? '⭐ Admin' : '🍕 Cajero'}</span></span><button onclick="logout()" style="color: var(--danger);">🚪 Salir</button>`;
+    mobileHtml += `<button onclick="logout()" style="color: var(--danger);">🚪 <span>Salir</span></button>`;
 
----
-
-Con esto en **desktop** se ve algo así en el header:
-```
-👤 Juan  ⭐ Admin    🚪 Salir
-    
     document.getElementById('desktop-nav').innerHTML = desktopHtml;
     document.getElementById('mobile-nav').innerHTML = mobileHtml;
-    
+
     document.getElementById('branch-selector').style.display = 'inline-block';
-document.getElementById('branch-selector').value = currentBranch;
-// Sincronizar selector mobile
-const mobSelector = document.getElementById('branch-selector-mobile');
-if (mobSelector) mobSelector.value = currentBranch;
-    
-    // Set active branch in selector
     document.getElementById('branch-selector').value = currentBranch;
+    const mobSelector = document.getElementById('branch-selector-mobile');
+    if (mobSelector) mobSelector.value = currentBranch;
 }
 
 function switchTab(tabId, btn) {
