@@ -1046,6 +1046,10 @@ function renderFlow() {
                     <div class="qty-display">${flowState.qty}</div>
                     <button class="qty-btn" onclick="changeQty(1)">+</button>
                 </div>
+                <div style="margin-top:15px;">
+                    <label style="display:block; color:var(--text-muted); font-size:13px; margin-bottom:6px;">📝 Aclaraciones / Pedido especial (opcional)</label>
+                    <textarea id="pizza-notes" rows="2" placeholder="Ej: sin ajo, sin aceitunas, bien cocida..." style="width:100%; padding:10px; background:#333; border:1px solid #555; color:white; border-radius:8px; font-size:14px; font-family:inherit; resize:none;">${flowState.notes || ''}</textarea>
+                </div>
                 <button class="btn-action" onclick="addPizzaToOrder(${price}, '${desc}')">AGREGAR A LA ORDEN</button>
             `;
         }
@@ -1123,6 +1127,7 @@ function renderFlow() {
 }
 
 function resetFlow() {
+    flowState.notes = '';
     let initialStep = orderMetadata && orderMetadata.orderType ? 1 : 0;
     flowState = { step: initialStep, category: null, size: null, numVarieties: 1, selections: [], doubleVariety: null, qty: 1, empSplit: { carne: 0, pollo: 0 }, ketoDough: null };
     renderFlow();
@@ -1277,10 +1282,13 @@ function changeEmpSplit(type, delta) {
 
 // --- ORDER MANAGEMENT ---
 function addPizzaToOrder(price, desc) {
+    const notesEl = document.getElementById('pizza-notes');
+    const notes = notesEl ? notesEl.value.trim() : '';
     currentOrder.push({
         type: 'pizza',
         title: `Pizza ${flowState.sizeName}`,
         desc: desc,
+        notes: notes,
         qty: flowState.qty,
         unitPrice: price,
         subtotal: price * flowState.qty
@@ -1368,6 +1376,8 @@ function updateOrder() {
                 <div class="item-info">
                     <div class="item-title">${item.qty}x ${item.title}</div>
                     ${item.desc ? `<div class="item-desc">${item.desc}</div>` : ''}
+                    ${item.notes ? `<div style="font-size:12px; color:#f39c12; margin-top:2px;">📝 ${item.notes}</div>` : ''}
+                    ${item.notes ? `<div style="font-size:12px; color:#f39c12; margin-top:2px;">📝 ${item.notes}</div>` : ''}
                 </div>
                 <div class="item-price">${formatMoney(item.subtotal)}</div>
                 <button class="btn-delete" onclick="removeOrderItem(${i})">✕</button>
@@ -1490,6 +1500,7 @@ async function processPayment() {
             </div>
             ${item.qty > 1 ? `<div style="font-size:11px; color:#888; margin-top:-4px; margin-bottom:2px; text-align:right;">c/u ${formatMoney(item.unitPrice)}</div>` : ''}
             ${item.desc ? `<div style="font-size:12px; color:#666; margin-bottom:5px;">${item.desc}</div>` : ''}
+            ${item.notes ? `<div style="font-size:12px; color:#e67e22; font-style:italic; margin-left:10px; margin-bottom:5px;">📝 ${item.notes}</div>` : ''}
         `).join('');
         document.getElementById('ticket-total-amount').innerText = formatMoney(total);
         document.getElementById('ticket-payment').innerText = `Pago: ${paymentMethod}`;
@@ -1999,180 +2010,154 @@ function shareWhatsApp() {
 }
 
 function printTicket() {
-    if (!lastSale) return;
-    const sale = lastSale;
-    const date = new Date().toLocaleString('es-AR');
+    const ticketContent = document.getElementById('ticket-content').innerHTML;
+    const printWindow = window.open('', '_blank', 'width=400,height=700');
+    printWindow.document.write(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            <title>Ticket - Locos x la Pizza</title>
+            <style>
+                * { margin: 0; padding: 0; box-sizing: border-box; }
+                body {
+                    font-family: 'Courier New', monospace;
+                    font-size: 12px;
+                    color: #000;
+                    background: #fff;
+                    width: 80mm;
+                }
+                .ticket-copy { width: 100%; padding: 6px 8px; }
+                .cut-line {
+                    text-align: center;
+                    font-size: 11px;
+                    margin: 6px 0;
+                    letter-spacing: 2px;
+                    color: #000;
+                }
 
-    // ── Info cliente ──────────────────────────────────────────────
-    let customerHtml = '';
-    if (sale.orderType === 'delivery') {
-        customerHtml = `
-            <div class="customer-block">
-                <div class="order-type">📞 DELIVERY</div>
-                <div>👤 ${sale.customerName || ''} &nbsp;📱 ${sale.customerPhone || ''}</div>
-                <div>📍 ${sale.customerAddress ? sale.customerAddress.street + ', ' + sale.customerAddress.barrio : ''}</div>
-                ${sale.customerAddress && sale.customerAddress.referencias ? '<div>📝 ' + sale.customerAddress.referencias + '</div>' : ''}
-            </div>`;
-    } else if (sale.orderType === 'retiro') {
-        customerHtml = `
-            <div class="customer-block">
-                <div class="order-type">🏃 RETIRO EN LOCAL</div>
-                <div>👤 ${sale.customerName || ''} ${sale.customerPhone ? '&nbsp;📱 ' + sale.customerPhone : ''}</div>
-            </div>`;
-    } else {
-        customerHtml = `
-            <div class="customer-block">
-                <div class="order-type">🏪 MOSTRADOR</div>
-            </div>`;
-    }
+                /* ── ENCABEZADO ── */
+                .ticket-header {
+                    text-align: center;
+                    border-bottom: 2px dashed #000;
+                    padding-bottom: 6px;
+                    margin-bottom: 8px;
+                }
+                .ticket-header h2 {
+                    font-size: 16px;
+                    font-weight: bold;
+                    text-transform: uppercase;
+                    font-style: normal;
+                    color: #000;
+                }
+                .ticket-header p { font-size: 11px; margin-top: 2px; color: #000; }
 
-    // ── Items ─────────────────────────────────────────────────────
-    let itemsHtml = sale.items.map(item => {
-        // Desglose de variedades (negrita, mayúscula, grande)
-        let detailHtml = '';
-        if (item.breakdown && item.breakdown.length > 1) {
-            detailHtml = item.breakdown.map(b =>
-                `<div class="variety-line">• ${b.toUpperCase()}</div>`
-            ).join('');
-        } else if (item.desc && item.desc !== 'Unidad') {
-            detailHtml = `<div class="variety-line">${item.desc.toUpperCase()}</div>`;
-        }
+                /* ── NUMERO DE TICKET: grande y negrita ── */
+                .ticket-header p:last-child {
+                    font-size: 18px !important;
+                    font-weight: bold !important;
+                    margin-top: 6px !important;
+                    letter-spacing: 1px;
+                }
 
-        return `
-            <div class="item-row">
-                <span class="item-name">${item.qty}X ${item.title.toUpperCase()}</span>
-                <span class="item-price">${item.subtotal.toLocaleString('es-AR')}</span>
-            </div>
-            ${item.qty > 1 ? `<div class="unit-price">c/u $${item.unitPrice.toLocaleString('es-AR')}</div>` : ''}
-            ${detailHtml}
-        `;
-    }).join('');
+                /* ── ITEMS: linea principal con tipo y cantidad ── */
+                .ticket-item {
+                    display: flex;
+                    justify-content: space-between;
+                    font-size: 16px !important;
+                    font-weight: bold !important;
+                    text-transform: uppercase !important;
+                    margin-top: 8px;
+                    margin-bottom: 2px;
+                    line-height: 1.4;
+                }
 
-    // ── Pago ──────────────────────────────────────────────────────
-    let paymentHtml = `<div class="payment-line">Pago: ${sale.paymentMethod}</div>`;
-    if (sale.paymentMethod === 'Efectivo' && sale.cashReceived) {
-        paymentHtml += `<div class="payment-line">Recibido: $${sale.cashReceived.toLocaleString('es-AR')}</div>`;
-        paymentHtml += `<div class="payment-line">Vuelto: $${(sale.cashReceived - sale.total).toLocaleString('es-AR')}</div>`;
-    }
+                /* ── DESGLOSE DE VARIEDADES: grande, negrita, mayuscula ── */
+                .ticket-copy div[style*="margin-left:10px"],
+                .ticket-copy div[style*="margin-left: 10px"] {
+                    font-size: 15px !important;
+                    font-weight: bold !important;
+                    text-transform: uppercase !important;
+                    color: #000 !important;
+                    line-height: 1.8 !important;
+                    margin-left: 0 !important;
+                }
 
-    // ── HTML de una copia ─────────────────────────────────────────
-    const oneCopy = `
-        <div class="ticket-copy">
-            <div class="header">
-                <div class="brand">🍕 LOCOS X LA PIZZA</div>
-                <div class="date">${date}</div>
-                <div class="ticket-num">TICKET #${sale.orderNumber}</div>
-            </div>
-            ${customerHtml}
-            <div class="items-block">
-                ${itemsHtml}
-            </div>
-            <div class="total-row">
-                <span>TOTAL</span>
-                <span>$${sale.total.toLocaleString('es-AR')}</span>
-            </div>
-            ${paymentHtml}
-        </div>`;
+                /* ── DESC simple (cuando hay 1 variedad) ── */
+                .ticket-copy div[style*="font-size:12px"],
+                .ticket-copy div[style*="font-size: 12px"] {
+                    font-size: 15px !important;
+                    font-weight: bold !important;
+                    text-transform: uppercase !important;
+                    color: #000 !important;
+                }
 
-    const printWindow = window.open('', '_blank', 'width=420,height=750');
-    printWindow.document.write(`<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <title>Ticket Locos x la Pizza</title>
-    <style>
-        * { margin:0; padding:0; box-sizing:border-box; }
-        body {
-            font-family: 'Courier New', monospace;
-            font-size: 11px;
-            color: #000;
-            background: #fff;
-            width: 80mm;
-        }
-        /* ── Encabezado ── */
-        .ticket-copy { padding: 6px 8px; }
-        .header { text-align:center; border-bottom:2px dashed #000; padding-bottom:8px; margin-bottom:8px; }
-        .brand   { font-size:15px; font-weight:bold; text-transform:uppercase; }
-        .date    { font-size:10px; margin-top:3px; }
-        .ticket-num {
-            font-size: 20px;
-            font-weight: bold;
-            text-transform: uppercase;
-            margin-top: 5px;
-            letter-spacing: 1px;
-        }
-        /* ── Cliente ── */
-        .customer-block { font-size:11px; margin-bottom:8px; line-height:1.7; }
-        .order-type { font-weight:bold; font-size:12px; margin-bottom:3px; }
-        /* ── Items ── */
-        .items-block { margin-bottom:6px; }
-        .item-row {
-            display: flex;
-            justify-content: space-between;
-            font-size: 15px;
-            font-weight: bold;
-            text-transform: uppercase;
-            margin-top: 8px;
-            line-height: 1.4;
-        }
-        .item-name { flex:1; padding-right:6px; }
-        .item-price { white-space:nowrap; }
-        .unit-price {
-            font-size: 10px;
-            font-weight: normal;
-            text-align: right;
-            color: #444;
-            margin-bottom: 2px;
-        }
-        .variety-line {
-            font-size: 14px;
-            font-weight: bold;
-            text-transform: uppercase;
-            line-height: 1.8;
-            padding-left: 4px;
-        }
-        /* ── Total ── */
-        .total-row {
-            display: flex;
-            justify-content: space-between;
-            font-size: 15px;
-            font-weight: bold;
-            border-top: 2px dashed #000;
-            padding-top: 6px;
-            margin-top: 8px;
-        }
-        .payment-line {
-            font-size: 11px;
-            text-align: right;
-            margin-top: 3px;
-        }
-        /* ── Separador corte ── */
-        .cut-line {
-            text-align: center;
-            font-size: 11px;
-            margin: 6px 0;
-            letter-spacing: 3px;
-        }
-        @media print {
-            @page { margin:0; size:80mm auto; }
-            body  { width:80mm; }
-        }
-    </style>
-</head>
-<body>
-    ${oneCopy}
-    <div class="cut-line">- - - - - - - - - - - - - - - - - -</div>
-    ${oneCopy}
-    <script>
-        window.onload = function() {
-            setTimeout(function() {
-                window.print();
-                setTimeout(function() { window.close(); }, 1500);
-            }, 300);
-        };
-    <\/script>
-</body>
-</html>`);
+                /* ── TOTAL ── */
+                .ticket-total {
+                    display: flex;
+                    justify-content: space-between;
+                    font-weight: bold;
+                    font-size: 15px;
+                    border-top: 2px dashed #000;
+                    padding-top: 6px;
+                    margin-top: 8px;
+                    color: #000;
+                }
+
+                /* ── INFO CLIENTE: tamaño normal ── */
+                #ticket-customer-info {
+                    font-size: 11px;
+                    margin-bottom: 8px;
+                    line-height: 1.6;
+                    color: #000;
+                }
+
+                /* ── PRECIO UNITARIO (c/u): chico, no es para cocina ── */
+                .ticket-copy div[style*="text-align:right"],
+                .ticket-copy div[style*="text-align: right"] {
+                    font-size: 10px !important;
+                    font-weight: normal !important;
+                    text-transform: none !important;
+                }
+
+                #ticket-payment { font-size: 11px; text-align: right; margin-top: 4px; }
+
+                /* Aclaraciones en impresión */
+                div[style*="e67e22"], div[style*="italic"] {
+                    font-size: 13px !important;
+                    font-weight: bold !important;
+                    font-style: normal !important;
+                    color: #000 !important;
+                    border-left: 3px solid #000;
+                    padding-left: 5px;
+                    margin: 3px 0 5px 0 !important;
+                    text-transform: uppercase !important;
+                }
+
+                * { color: #000 !important; background: transparent !important;
+                    text-shadow: none !important; box-shadow: none !important; }
+
+                @media print {
+                    @page { margin: 0; size: 80mm auto; }
+                    body { width: 80mm; }
+                }
+            </style>
+        </head>
+        <body>
+            <div class="ticket-copy">${ticketContent}</div>
+            <div class="cut-line">- - - - - - - - - - - - - - - - - -</div>
+            <div class="ticket-copy">${ticketContent}</div>
+            <script>
+                window.onload = function() {
+                    setTimeout(function() {
+                        window.print();
+                        setTimeout(function() { window.close(); }, 1500);
+                    }, 300);
+                };
+            <\/script>
+        </body>
+        </html>
+    `);
     printWindow.document.close();
 }
 
