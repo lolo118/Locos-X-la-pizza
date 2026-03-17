@@ -665,13 +665,6 @@ function renderNavigation() {
     const mobSelector = document.getElementById('branch-selector-mobile');
     if (mobSelector) mobSelector.value = currentBranch;
 }
-// Sincronizar selector mobile
-const mobSelector = document.getElementById('branch-selector-mobile');
-if (mobSelector) mobSelector.value = currentBranch;
-    
-    // Set active branch in selector
-    document.getElementById('branch-selector').value = currentBranch;
-}
 
 function switchTab(tabId, btn) {
     document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
