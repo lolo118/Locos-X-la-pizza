@@ -303,59 +303,99 @@
 
     <!-- REPORTES SECTION -->
     <div id="reportes" class="section" style="display: none; flex-direction: column;">
-        <h2 class="step-title">Reportes</h2>
-        <div style="margin-bottom: 20px;">
-            <select id="rep-filter-date" style="padding: 8px; background: #333; color: white; border: 1px solid #555; border-radius: 4px;" onchange="renderReports()">
-                <option value="today">Hoy</option>
-                <option value="week">Esta semana</option>
-                <option value="month">Este mes</option>
-                <option value="all">Todo histórico</option>
-            </select>
+    <h2 class="step-title">📊 Reportes</h2>
+
+    <!-- Filtros -->
+    <div style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:20px; align-items:center;">
+        <select id="rep-filter-date" style="padding:8px; background:#333; color:white; border:1px solid #555; border-radius:4px;" onchange="renderReports()">
+            <option value="today">Hoy</option>
+            <option value="week">Esta semana</option>
+            <option value="month">Este mes</option>
+            <option value="all">Todo histórico</option>
+        </select>
+        <select id="rep-filter-branch" style="padding:8px; background:#333; color:white; border:1px solid #555; border-radius:4px;" onchange="renderReports()">
+            <option value="all">Ambas sucursales</option>
+            <option value="sucursal1">📍 PLGALLO</option>
+            <option value="sucursal2">📍 POSADAS</option>
+        </select>
+    </div>
+
+    <!-- KPIs principales -->
+    <div class="stats-grid" style="grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); margin-bottom:20px;">
+        <div class="stat-card">
+            <div style="font-size:12px; color:var(--text-muted);">💰 Total Recaudado</div>
+            <div class="stat-value" id="rep-total">$0</div>
         </div>
-        
-        <div class="stats-grid">
-            <div class="stat-card">
-                <div>Total Recaudado</div>
-                <div class="stat-value" id="rep-total">$0</div>
-            </div>
-            <div class="stat-card">
-                <div>Órdenes</div>
-                <div class="stat-value" id="rep-orders">0</div>
-            </div>
-            <div class="stat-card">
-                <div>Ticket Promedio</div>
-                <div class="stat-value" id="rep-avg">$0</div>
-            </div>
+        <div class="stat-card">
+            <div style="font-size:12px; color:var(--text-muted);">🧾 Órdenes</div>
+            <div class="stat-value" id="rep-orders">0</div>
         </div>
-        
-        <div style="display: flex; gap: 20px; flex-wrap: wrap;">
-            <div style="flex: 1; min-width: 300px; background: var(--bg-panel); padding: 20px; border-radius: 8px;">
-                <h3>Top Productos</h3>
-                <ul id="rep-top-products" style="list-style: none; margin-top: 10px; line-height: 1.8;"></ul>
-            </div>
-            <div style="flex: 1; min-width: 300px; background: var(--bg-panel); padding: 20px; border-radius: 8px;">
-                <h3>Top Variedades de Pizza</h3>
-                <ul id="rep-top-pizzas" style="list-style: none; margin-top: 10px; line-height: 1.8;"></ul>
-            </div>
+        <div class="stat-card">
+            <div style="font-size:12px; color:var(--text-muted);">📈 Ticket Promedio</div>
+            <div class="stat-value" id="rep-avg">$0</div>
         </div>
-        
-        <div style="display: flex; gap: 20px; flex-wrap: wrap; margin-top: 20px;">
-            <div style="flex: 1; min-width: 300px; background: var(--bg-panel); padding: 20px; border-radius: 8px;">
-                <h3>Empanadas (Carne vs Pollo)</h3>
-                <div id="rep-empanadas" style="margin-top: 10px;"></div>
-            </div>
-            <div style="flex: 1; min-width: 300px; background: var(--bg-panel); padding: 20px; border-radius: 8px;">
-                <h3>Métodos de Pago</h3>
-                <div id="rep-payments" style="margin-top: 10px;"></div>
-            </div>
+        <div class="stat-card">
+            <div style="font-size:12px; color:var(--text-muted);">📞 Delivery</div>
+            <div class="stat-value" id="rep-delivery-count">0</div>
         </div>
-        
-        <div style="background: var(--bg-panel); padding: 20px; border-radius: 8px; margin-top: 20px;">
-            <h3>Ventas por Día</h3>
-            <div style="display: flex; height: 250px; align-items: flex-end; gap: 10px; padding-top: 30px; border-bottom: 1px solid #555; margin-top: 10px;" id="rep-chart">
-            </div>
-            <div style="display: flex; gap: 10px; margin-top: 5px;" id="rep-chart-labels"></div>
+        <div class="stat-card">
+            <div style="font-size:12px; color:var(--text-muted);">🏃 Retiro</div>
+            <div class="stat-value" id="rep-retiro-count">0</div>
         </div>
+        <div class="stat-card">
+            <div style="font-size:12px; color:var(--text-muted);">🏪 Mostrador</div>
+            <div class="stat-value" id="rep-mostrador-count">0</div>
+        </div>
+    </div>
+
+    <!-- Modos de pedido y Métodos de pago -->
+    <div style="display:flex; gap:20px; flex-wrap:wrap; margin-bottom:20px;">
+        <div style="flex:1; min-width:280px; background:var(--bg-panel); padding:20px; border-radius:8px;">
+            <h3 style="margin-bottom:15px;">🛵 Modos de Pedido</h3>
+            <div id="rep-order-types"></div>
+        </div>
+        <div style="flex:1; min-width:280px; background:var(--bg-panel); padding:20px; border-radius:8px;">
+            <h3 style="margin-bottom:15px;">💳 Métodos de Pago</h3>
+            <div id="rep-payments"></div>
+        </div>
+    </div>
+
+    <!-- Top productos y pizzas -->
+    <div style="display:flex; gap:20px; flex-wrap:wrap; margin-bottom:20px;">
+        <div style="flex:1; min-width:280px; background:var(--bg-panel); padding:20px; border-radius:8px;">
+            <h3 style="margin-bottom:15px;">🏆 Top Productos</h3>
+            <ul id="rep-top-products" style="list-style:none; margin-top:10px; line-height:1.8;"></ul>
+        </div>
+        <div style="flex:1; min-width:280px; background:var(--bg-panel); padding:20px; border-radius:8px;">
+            <h3 style="margin-bottom:15px;">🍕 Top Variedades de Pizza</h3>
+            <ul id="rep-top-pizzas" style="list-style:none; margin-top:10px; line-height:1.8;"></ul>
+        </div>
+    </div>
+
+    <!-- Empanadas -->
+    <div style="display:flex; gap:20px; flex-wrap:wrap; margin-bottom:20px;">
+        <div style="flex:1; min-width:280px; background:var(--bg-panel); padding:20px; border-radius:8px;">
+            <h3 style="margin-bottom:15px;">🥟 Empanadas (Carne vs Pollo)</h3>
+            <div id="rep-empanadas" style="margin-top:10px;"></div>
+        </div>
+        <div style="flex:1; min-width:280px; background:var(--bg-panel); padding:20px; border-radius:8px;">
+            <h3 style="margin-bottom:15px;">📍 Ventas por Sucursal</h3>
+            <div id="rep-branches" style="margin-top:10px;"></div>
+        </div>
+    </div>
+
+    <!-- Gráfico de ventas por día -->
+    <div style="background:var(--bg-panel); padding:20px; border-radius:8px; margin-bottom:20px;">
+        <h3 style="margin-bottom:15px;">📅 Ventas por Día</h3>
+        <div style="display:flex; height:200px; align-items:flex-end; gap:6px; padding-top:30px; border-bottom:1px solid #555;" id="rep-chart"></div>
+        <div style="display:flex; gap:6px; margin-top:5px;" id="rep-chart-labels"></div>
+    </div>
+
+    <!-- Gráfico de ventas por hora -->
+    <div style="background:var(--bg-panel); padding:20px; border-radius:8px; margin-bottom:80px;">
+        <h3 style="margin-bottom:15px;">🕐 Pedidos por Franja Horaria</h3>
+        <div style="display:flex; height:150px; align-items:flex-end; gap:4px; padding-top:20px; border-bottom:1px solid #555;" id="rep-chart-hours"></div>
+        <div style="display:flex; gap:4px; margin-top:5px;" id="rep-chart-hours-labels"></div>
     </div>
 </div>
 
