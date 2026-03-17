@@ -1277,10 +1277,46 @@ function changeEmpSplit(type, delta) {
 
 // --- ORDER MANAGEMENT ---
 function addPizzaToOrder(price, desc) {
+    // Armar desglose de precios por variedad
+    let breakdown = [];
+    let s = flowState.selections.map(i => db.pizzas[i]);
+
+    if (flowState.size === 'p4') {
+        breakdown = [`${s[0].name}: ${formatMoney(s[0].p4)}`];
+    } else if (flowState.size === 'p8') {
+        if (flowState.numVarieties === 1) {
+            breakdown = [`${s[0].name}: ${formatMoney(s[0].p8)}`];
+        } else {
+            breakdown = s.map(v => v ? `${v.name} (mitad): ${formatMoney(v.p4)}` : '').filter(Boolean);
+        }
+    } else if (flowState.size === 'p18') {
+        if (flowState.numVarieties === 1) {
+            breakdown = [`${s[0].name}: ${formatMoney(s[0].p18)}`];
+        } else {
+            breakdown = s.map(v => v ? `${v.name} (mitad): ${formatMoney(v.p8)}` : '').filter(Boolean);
+        }
+    } else if (flowState.size === 'p36') {
+        if (flowState.numVarieties === 1) {
+            breakdown = [`${s[0].name}: ${formatMoney(s[0].p36)}`];
+        } else if (flowState.numVarieties === 2) {
+            breakdown = s.map(v => v ? `${v.name} (mitad): ${formatMoney(v.p18)}` : '').filter(Boolean);
+        } else if (flowState.numVarieties === 3) {
+            let d = flowState.doubleVariety;
+            let others = s.filter((_, idx) => idx !== d);
+            breakdown = [
+                `${s[d].name} (2 cuartos): ${formatMoney(s[d].p18)}`,
+                ...others.map(v => v ? `${v.name} (1 cuarto): ${formatMoney(v.p8)}` : '').filter(Boolean)
+            ];
+        } else if (flowState.numVarieties === 4) {
+            breakdown = s.map(v => v ? `${v.name} (cuarto): ${formatMoney(v.p8)}` : '').filter(Boolean);
+        }
+    }
+
     currentOrder.push({
         type: 'pizza',
         title: `Pizza ${flowState.sizeName}`,
         desc: desc,
+        breakdown: breakdown,
         qty: flowState.qty,
         unitPrice: price,
         subtotal: price * flowState.qty
@@ -1489,7 +1525,10 @@ async function processPayment() {
                 <span>${formatMoney(item.subtotal)}</span>
             </div>
             ${item.qty > 1 ? `<div style="font-size:11px; color:#888; margin-top:-4px; margin-bottom:2px; text-align:right;">c/u ${formatMoney(item.unitPrice)}</div>` : ''}
-            ${item.desc ? `<div style="font-size:12px; color:#666; margin-bottom:5px;">${item.desc}</div>` : ''}
+            ${item.breakdown && item.breakdown.length > 1 ? 
+                item.breakdown.map(b => `<div style="font-size:11px; color:#888; margin-left:10px; line-height:1.6;">• ${b}</div>`).join('') 
+                : (item.desc ? `<div style="font-size:12px; color:#666; margin-bottom:5px;">${item.desc}</div>` : '')
+            }
         `).join('');
         document.getElementById('ticket-total-amount').innerText = formatMoney(total);
         document.getElementById('ticket-payment').innerText = `Pago: ${paymentMethod}`;
