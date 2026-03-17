@@ -1641,9 +1641,10 @@ function anularVenta(id) {
 // --- REPORTES ---
 function renderReports() {
     const filter = document.getElementById('rep-filter-date').value;
+    const branchFilter = document.getElementById('rep-filter-branch')?.value || 'all';
     const now = new Date();
     let start = new Date(0);
-    
+
     if (filter === 'today') {
         start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     } else if (filter === 'week') {
@@ -1653,56 +1654,114 @@ function renderReports() {
     } else if (filter === 'month') {
         start = new Date(now.getFullYear(), now.getMonth(), 1);
     }
-    
-    let validSales = sales.filter(s => s.status === 'completed' && new Date(s.date) >= start);
-    
-    let total = validSales.reduce((sum, s) => sum + s.total, 0);
-    let orders = validSales.length;
-    let avg = orders > 0 ? total / orders : 0;
-    
+
+    let validSales = sales.filter(s => {
+        if (s.status !== 'completed') return false;
+        if (new Date(s.date) < start) return false;
+        if (branchFilter !== 'all' && s.branch !== branchFilter) return false;
+        return true;
+    });
+
+    // KPIs básicos
+    const total = validSales.reduce((sum, s) => sum + s.total, 0);
+    const orders = validSales.length;
+    const avg = orders > 0 ? total / orders : 0;
     document.getElementById('rep-total').innerText = formatMoney(total);
     document.getElementById('rep-orders').innerText = orders;
     document.getElementById('rep-avg').innerText = formatMoney(avg);
-    
-    // Payment breakdown
-    let pays = { Efectivo: 0, Transferencia: 0, Tarjeta: 0 };
-    validSales.forEach(s => pays[s.paymentMethod] += s.total);
-    
-    document.getElementById('rep-payments').innerHTML = Object.entries(pays).map(([k, v]) => {
-        let pct = total > 0 ? (v / total * 100).toFixed(1) : 0;
+
+    // Conteo por modo de pedido
+    const byType = { delivery: 0, retiro: 0, mostrador: 0 };
+    validSales.forEach(s => {
+        if (byType[s.orderType] !== undefined) byType[s.orderType]++;
+    });
+    document.getElementById('rep-delivery-count').innerText = byType.delivery;
+    document.getElementById('rep-retiro-count').innerText = byType.retiro;
+    document.getElementById('rep-mostrador-count').innerText = byType.mostrador;
+
+    // Modos de pedido con barras
+    const typeLabels = { delivery: '📞 Delivery', retiro: '🏃 Retiro', mostrador: '🏪 Mostrador' };
+    const typeColors = { delivery: '#3498db', retiro: '#f39c12', mostrador: '#27ae60' };
+    document.getElementById('rep-order-types').innerHTML = Object.entries(byType).map(([k, v]) => {
+        const pct = orders > 0 ? (v / orders * 100).toFixed(1) : 0;
         return `
-            <div style="margin-bottom:10px;">
-                <div style="display:flex; justify-content:space-between; font-size:14px;">
-                    <span>${k}</span><span>${pct}% (${formatMoney(v)})</span>
+            <div style="margin-bottom:12px;">
+                <div style="display:flex; justify-content:space-between; font-size:14px; margin-bottom:5px;">
+                    <span>${typeLabels[k]}</span>
+                    <span style="color:${typeColors[k]}; font-weight:bold;">${v} pedidos (${pct}%)</span>
                 </div>
-                <div style="background:#444; height:8px; border-radius:4px; margin-top:5px; overflow:hidden;">
-                    <div style="background:var(--primary); height:100%; width:${pct}%"></div>
+                <div style="background:#444; height:8px; border-radius:4px; overflow:hidden;">
+                    <div style="background:${typeColors[k]}; height:100%; width:${pct}%; transition:width 0.3s;"></div>
                 </div>
             </div>
         `;
     }).join('');
-    
-    // Products breakdown
-    let products = {};
-    let pizzas = {};
-    let empanadas = { Carne: 0, Pollo: 0 };
-    
+
+    // Métodos de pago
+    const pays = { Efectivo: 0, Transferencia: 0, Tarjeta: 0 };
+    validSales.forEach(s => {
+        const key = s.paymentMethod;
+        if (pays[key] !== undefined) pays[key] += s.total;
+    });
+    document.getElementById('rep-payments').innerHTML = Object.entries(pays).map(([k, v]) => {
+        const pct = total > 0 ? (v / total * 100).toFixed(1) : 0;
+        return `
+            <div style="margin-bottom:12px;">
+                <div style="display:flex; justify-content:space-between; font-size:14px; margin-bottom:5px;">
+                    <span>${k}</span>
+                    <span style="font-weight:bold;">${pct}% (${formatMoney(v)})</span>
+                </div>
+                <div style="background:#444; height:8px; border-radius:4px; overflow:hidden;">
+                    <div style="background:var(--primary); height:100%; width:${pct}%; transition:width 0.3s;"></div>
+                </div>
+            </div>
+        `;
+    }).join('');
+
+    // Ventas por sucursal
+    const branchTotals = { sucursal1: 0, sucursal2: 0 };
+    const branchCounts = { sucursal1: 0, sucursal2: 0 };
+    validSales.forEach(s => {
+        if (branchTotals[s.branch] !== undefined) {
+            branchTotals[s.branch] += s.total;
+            branchCounts[s.branch]++;
+        }
+    });
+    const branchNames = { sucursal1: '📍 PLGALLO', sucursal2: '📍 POSADAS' };
+    document.getElementById('rep-branches').innerHTML = Object.entries(branchTotals).map(([k, v]) => {
+        const pct = total > 0 ? (v / total * 100).toFixed(1) : 0;
+        return `
+            <div style="margin-bottom:12px;">
+                <div style="display:flex; justify-content:space-between; font-size:14px; margin-bottom:5px;">
+                    <span>${branchNames[k]}</span>
+                    <span style="font-weight:bold;">${branchCounts[k]} pedidos · ${formatMoney(v)}</span>
+                </div>
+                <div style="background:#444; height:8px; border-radius:4px; overflow:hidden;">
+                    <div style="background:#9b59b6; height:100%; width:${pct}%; transition:width 0.3s;"></div>
+                </div>
+            </div>
+        `;
+    }).join('');
+
+    // Productos y pizzas
+    const products = {};
+    const pizzas = {};
+    const empanadas = { Carne: 0, Pollo: 0 };
+
     validSales.forEach(s => {
         s.items.forEach(i => {
             products[i.title] = (products[i.title] || 0) + i.qty;
-            
             if (i.type === 'pizza' || i.type === 'keto') {
-                let vars = i.desc.split(' + ');
-                vars.forEach(v => {
-                    let cleanVar = v.replace(/ \(media\)| \(cuarto\)| \(mitad \+ mitad\)| \(Harina de Almendras\)| \(Fécula de Arroz, Maíz y Mandioca\)/g, '');
-                    pizzas[cleanVar] = (pizzas[cleanVar] || 0) + i.qty;
+                i.desc.split(' + ').forEach(v => {
+                    const clean = v.replace(/ \(media\)| \(cuarto\)| \(mitad \+ mitad\)/g, '').trim();
+                    pizzas[clean] = (pizzas[clean] || 0) + i.qty;
                 });
             } else if (i.type === 'empanada') {
                 if (i.desc === 'Unidad') {
-                    let type = i.title.includes('Carne') ? 'Carne' : 'Pollo';
-                    empanadas[type] += i.qty;
+                    const t = i.title.includes('Carne') ? 'Carne' : 'Pollo';
+                    empanadas[t] += i.qty;
                 } else {
-                    let match = i.desc.match(/Carne x(\d+) \/ Pollo x(\d+)/);
+                    const match = i.desc.match(/Carne x(\d+) \/ Pollo x(\d+)/);
                     if (match) {
                         empanadas.Carne += parseInt(match[1]) * i.qty;
                         empanadas.Pollo += parseInt(match[2]) * i.qty;
@@ -1711,67 +1770,94 @@ function renderReports() {
             }
         });
     });
-    
-    let topProds = Object.entries(products).sort((a,b) => b[1] - a[1]).slice(0, 5);
-    let topPizzas = Object.entries(pizzas).sort((a,b) => b[1] - a[1]).slice(0, 5);
-    
-    let prodsHtml = topProds.map(p => `
-        <li style="display:flex; justify-content:space-between; border-bottom:1px solid #444; padding:5px 0;">
-            <span>${p[0]}</span> <strong>${p[1]}</strong>
-        </li>
-    `).join('');
-    
-    let pizzasHtml = topPizzas.map(p => `
-        <li style="display:flex; justify-content:space-between; border-bottom:1px solid #444; padding:5px 0;">
-            <span>${p[0]}</span> <strong>${p[1]}</strong>
-        </li>
-    `).join('');
-    
-    let empTotal = empanadas.Carne + empanadas.Pollo;
-    let empHtml = empTotal > 0 ? `
-        <div style="margin-bottom:10px;">
-            <div style="display:flex; justify-content:space-between; font-size:14px;">
-                <span>🥩 Carne</span><span>${((empanadas.Carne/empTotal)*100).toFixed(1)}% (${empanadas.Carne})</span>
+
+    // Top 5 productos
+    document.getElementById('rep-top-products').innerHTML = Object.entries(products)
+        .sort((a,b) => b[1] - a[1]).slice(0,5)
+        .map(([name, qty]) => `
+            <li style="display:flex; justify-content:space-between; border-bottom:1px solid #444; padding:6px 0;">
+                <span style="font-size:14px;">${name}</span>
+                <strong style="color:var(--primary);">${qty}</strong>
+            </li>
+        `).join('') || '<li style="color:#666">Sin datos</li>';
+
+    // Top 5 variedades de pizza
+    document.getElementById('rep-top-pizzas').innerHTML = Object.entries(pizzas)
+        .sort((a,b) => b[1] - a[1]).slice(0,5)
+        .map(([name, qty]) => `
+            <li style="display:flex; justify-content:space-between; border-bottom:1px solid #444; padding:6px 0;">
+                <span style="font-size:14px;">${name}</span>
+                <strong style="color:var(--primary);">${qty}</strong>
+            </li>
+        `).join('') || '<li style="color:#666">Sin datos</li>';
+
+    // Empanadas
+    const empTotal = empanadas.Carne + empanadas.Pollo;
+    document.getElementById('rep-empanadas').innerHTML = empTotal > 0 ? `
+        <div style="margin-bottom:12px;">
+            <div style="display:flex; justify-content:space-between; font-size:14px; margin-bottom:5px;">
+                <span>🥩 Carne</span>
+                <span style="font-weight:bold;">${empanadas.Carne} unidades (${((empanadas.Carne/empTotal)*100).toFixed(1)}%)</span>
             </div>
-            <div style="background:#444; height:8px; border-radius:4px; margin-top:5px; overflow:hidden;">
-                <div style="background:var(--primary); height:100%; width:${(empanadas.Carne/empTotal)*100}%"></div>
+            <div style="background:#444; height:8px; border-radius:4px; overflow:hidden;">
+                <div style="background:var(--primary); height:100%; width:${(empanadas.Carne/empTotal)*100}%;"></div>
             </div>
         </div>
-        <div style="margin-bottom:10px;">
-            <div style="display:flex; justify-content:space-between; font-size:14px;">
-                <span>🍗 Pollo</span><span>${((empanadas.Pollo/empTotal)*100).toFixed(1)}% (${empanadas.Pollo})</span>
+        <div style="margin-bottom:12px;">
+            <div style="display:flex; justify-content:space-between; font-size:14px; margin-bottom:5px;">
+                <span>🍗 Pollo</span>
+                <span style="font-weight:bold;">${empanadas.Pollo} unidades (${((empanadas.Pollo/empTotal)*100).toFixed(1)}%)</span>
             </div>
-            <div style="background:#444; height:8px; border-radius:4px; margin-top:5px; overflow:hidden;">
-                <div style="background:var(--warning); height:100%; width:${(empanadas.Pollo/empTotal)*100}%"></div>
+            <div style="background:#444; height:8px; border-radius:4px; overflow:hidden;">
+                <div style="background:var(--warning); height:100%; width:${(empanadas.Pollo/empTotal)*100}%;"></div>
             </div>
+        </div>
+        <div style="text-align:center; margin-top:10px; font-size:13px; color:var(--text-muted);">
+            Total: ${empTotal} empanadas vendidas
         </div>
     ` : '<p style="color:#666">Sin datos</p>';
-    
-    document.getElementById('rep-top-products').innerHTML = prodsHtml || '<li style="color:#666">Sin datos</li>';
-    document.getElementById('rep-top-pizzas').innerHTML = pizzasHtml || '<li style="color:#666">Sin datos</li>';
-    document.getElementById('rep-empanadas').innerHTML = empHtml;
-    
-    // Chart (Sales per day)
-    let days = {};
+
+    // Gráfico ventas por día
+    const days = {};
     validSales.forEach(s => {
-        let d = new Date(s.date).toLocaleDateString('es-AR', {day:'2-digit', month:'2-digit'});
+        const d = new Date(s.date).toLocaleDateString('es-AR', {day:'2-digit', month:'2-digit'});
         days[d] = (days[d] || 0) + s.total;
     });
-    
-    let chartHtml = '';
-    let labelsHtml = '';
-    let maxDay = Math.max(...Object.values(days), 1);
-    
-    Object.entries(days).sort((a,b) => a[0].localeCompare(b[0])).slice(-7).forEach(([d, v]) => {
-        let h = (v / maxDay * 100) + '%';
-        chartHtml += `<div style="flex:1; display:flex; flex-direction:column; justify-content:flex-end; align-items:center; height:100%;">
-            <div class="bar" style="height:${h}"><span>$${(v/1000).toFixed(0)}k</span></div>
-        </div>`;
-        labelsHtml += `<div style="flex:1; text-align:center; font-size:10px; color:#aaa;">${d}</div>`;
+    const maxDay = Math.max(...Object.values(days), 1);
+    const sortedDays = Object.entries(days).sort((a,b) => a[0].localeCompare(b[0])).slice(-10);
+    document.getElementById('rep-chart').innerHTML = sortedDays.map(([d, v]) => {
+        const h = (v / maxDay * 100);
+        return `
+            <div style="flex:1; display:flex; flex-direction:column; justify-content:flex-end; align-items:center; height:100%;">
+                <span style="font-size:10px; color:#aaa; margin-bottom:3px;">$${(v/1000).toFixed(0)}k</span>
+                <div class="bar" style="height:${h}%; width:100%; background:var(--primary); border-radius:4px 4px 0 0;"></div>
+            </div>
+        `;
+    }).join('') || '<div style="width:100%; text-align:center; color:#666;">Sin datos</div>';
+    document.getElementById('rep-chart-labels').innerHTML = sortedDays
+        .map(([d]) => `<div style="flex:1; text-align:center; font-size:10px; color:#aaa;">${d}</div>`).join('');
+
+    // Gráfico pedidos por franja horaria
+    const hours = {};
+    for (let h = 0; h < 24; h++) hours[h] = 0;
+    validSales.forEach(s => {
+        const h = new Date(s.date).getHours();
+        hours[h]++;
     });
-    
-    document.getElementById('rep-chart').innerHTML = chartHtml || '<div style="width:100%; text-align:center; color:#666;">Sin datos</div>';
-    document.getElementById('rep-chart-labels').innerHTML = labelsHtml;
+    const maxHour = Math.max(...Object.values(hours), 1);
+    const activeHours = Object.entries(hours).filter(([h]) => parseInt(h) >= 8 && parseInt(h) <= 23);
+    document.getElementById('rep-chart-hours').innerHTML = activeHours.map(([h, v]) => {
+        const pct = (v / maxHour * 100);
+        const color = v === Math.max(...activeHours.map(x => x[1])) ? '#f39c12' : 'var(--primary)';
+        return `
+            <div style="flex:1; display:flex; flex-direction:column; justify-content:flex-end; align-items:center; height:100%;">
+                ${v > 0 ? `<span style="font-size:9px; color:#aaa; margin-bottom:2px;">${v}</span>` : ''}
+                <div style="height:${pct}%; width:100%; background:${color}; border-radius:3px 3px 0 0; min-height:${v>0?'4px':'0'};"></div>
+            </div>
+        `;
+    }).join('');
+    document.getElementById('rep-chart-hours-labels').innerHTML = activeHours
+        .map(([h]) => `<div style="flex:1; text-align:center; font-size:9px; color:#aaa;">${h}h</div>`).join('');
 }
 
 // --- SETTINGS ---
