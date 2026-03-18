@@ -2062,7 +2062,23 @@ function reprintTicket(saleId) {
         .total-row    { display:flex; justify-content:space-between; font-size:15px; font-weight:bold; border-top:2px dashed #000; padding-top:6px; margin-top:8px; }
         .payment-line { font-size:11px; text-align:right; margin-top:3px; }
         .cut-line     { text-align:center; font-size:11px; margin:6px 0; letter-spacing:3px; }
-        @media print  { @page { margin:0; size:80mm auto; } body { width:80mm; } }
+        * { page-break-inside:avoid !important; break-inside:avoid !important; }
+        .item-row, .total-row, .header, .customer-block,
+        .items-block, .variety-line, .notes-line, .payment-line {
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
+            page-break-before: avoid !important;
+            break-before: avoid !important;
+        }
+        .item-row + div, .item-row ~ div {
+            page-break-before: avoid !important;
+            break-before: avoid !important;
+        }
+        @media print  {
+            @page { margin:0; size:80mm auto; }
+            html, body { width:80mm; height:auto !important; }
+            body * { page-break-inside:avoid !important; break-inside:avoid !important; }
+        }
     </style>
 </head>
 <body>
@@ -2581,9 +2597,38 @@ function printTicket() {
                 * { color: #000 !important; background: transparent !important;
                     text-shadow: none !important; box-shadow: none !important; }
 
+                /* ── EVITAR CORTES DE PÁGINA ENTRE ELEMENTOS ── */
+                * {
+                    page-break-inside: avoid !important;
+                    break-inside: avoid !important;
+                }
+                .ticket-item, .ticket-total, .ticket-header,
+                #ticket-customer-info, #ticket-items, #ticket-payment,
+                .ticket-copy > div {
+                    page-break-inside: avoid !important;
+                    break-inside: avoid !important;
+                    page-break-after: auto !important;
+                    break-after: auto !important;
+                }
+                /* Evitar salto entre el item y su desglose de variedades */
+                .ticket-item + div,
+                .ticket-item ~ div {
+                    page-break-before: avoid !important;
+                    break-before: avoid !important;
+                }
+                #ticket-items {
+                    page-break-inside: avoid !important;
+                    break-inside: avoid !important;
+                }
+
                 @media print {
                     @page { margin: 0; size: 80mm auto; }
-                    body { width: 80mm; }
+                    html, body { width: 80mm; height: auto !important; }
+                    /* Forzar que todo el contenido fluya sin cortes */
+                    body * {
+                        page-break-inside: avoid !important;
+                        break-inside: avoid !important;
+                    }
                 }
             </style>
         </head>
