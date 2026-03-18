@@ -1955,11 +1955,130 @@ function renderHistory() {
                 <div class="history-details" onclick="event.stopPropagation()">
                     ${s.customerName ? `<div style="margin-bottom: 10px; color: #ccc;">👤 ${s.customerName} ${s.customerPhone ? `- 📱 ${s.customerPhone}` : ''}</div>` : ''}
                     ${s.items.map(i => `<div>${i.qty}x ${i.title} - ${formatMoney(i.subtotal)}</div>`).join('')}
-                    <button class="btn-delete" style="margin-top:10px; border:1px solid var(--danger); border-radius:4px; padding:5px 10px;" onclick="anularVenta('${s.id}')">Anular Venta</button>
+                    <div style="display:flex; gap:8px; margin-top:10px;">
+                        <button style="flex:1; padding:6px 10px; background:#555; color:white; border:none; border-radius:4px; cursor:pointer; font-size:13px; font-weight:bold;" onclick="event.stopPropagation(); reprintTicket('${s.id}')">🖨️ Reimprimir</button>
+                        ${userRole === 'admin' ? `<button class="btn-delete" style="flex:1; border:1px solid var(--danger); border-radius:4px; padding:6px 10px; font-size:13px;" onclick="anularVenta('${s.id}')">Anular Venta</button>` : ''}
+                    </div>
                 </div>
             </div>
         `;
     }).join('');
+}
+
+function reprintTicket(saleId) {
+    const sale = sales.find(s => s.id === saleId);
+    if (!sale) { showDialog('Error', 'No se encontró la venta.', [{text:'OK', action:closeDialog}]); return; }
+
+    // ── Info cliente ──────────────────────────────────────────────
+    let customerBlock = '';
+    if (sale.orderType === 'delivery') {
+        customerBlock = `<div class="customer-block">
+            <div class="order-type">📞 DELIVERY</div>
+            <div>👤 ${sale.customerName || ''} &nbsp;📱 ${sale.customerPhone || ''}</div>
+            <div>📍 ${sale.customerAddress ? (sale.customerAddress.street + ', ' + sale.customerAddress.barrio) : ''}</div>
+            ${sale.customerAddress && sale.customerAddress.referencias ? '<div>📝 ' + sale.customerAddress.referencias + '</div>' : ''}
+        </div>`;
+    } else if (sale.orderType === 'retiro') {
+        customerBlock = `<div class="customer-block">
+            <div class="order-type">🏃 RETIRO EN LOCAL</div>
+            <div>👤 ${sale.customerName || ''} ${sale.customerPhone ? '&nbsp;📱 ' + sale.customerPhone : ''}</div>
+        </div>`;
+    } else {
+        customerBlock = `<div class="customer-block"><div class="order-type">🏪 MOSTRADOR</div></div>`;
+    }
+
+    // ── Items ─────────────────────────────────────────────────────
+    let itemsHtml = sale.items.map(item => {
+        let detailHtml = '';
+        if (item.breakdown && item.breakdown.length > 1) {
+            detailHtml = item.breakdown.map(b => `<div class="variety-line">• ${b.toUpperCase()}</div>`).join('');
+        } else if (item.desc && item.desc !== 'Unidad') {
+            detailHtml = `<div class="variety-line">${item.desc.toUpperCase()}</div>`;
+        }
+        if (item.notes) {
+            detailHtml += `<div class="notes-line">📝 ${item.notes.toUpperCase()}</div>`;
+        }
+        return `
+            <div class="item-row">
+                <span class="item-name">${item.qty}X ${item.title.toUpperCase()}</span>
+                <span class="item-price">$${item.subtotal.toLocaleString('es-AR')}</span>
+            </div>
+            ${item.qty > 1 ? `<div class="unit-price">c/u $${item.unitPrice.toLocaleString('es-AR')}</div>` : ''}
+            ${detailHtml}`;
+    }).join('');
+
+    // ── Pago ──────────────────────────────────────────────────────
+    let paymentHtml = `<div class="payment-line">Pago: ${sale.paymentMethod}</div>`;
+    if (sale.paymentMethod === 'Efectivo' && sale.cashReceived) {
+        paymentHtml += `<div class="payment-line">Recibido: $${sale.cashReceived.toLocaleString('es-AR')}</div>`;
+        paymentHtml += `<div class="payment-line">Vuelto: $${Math.max(0, (sale.cashReceived - sale.total)).toLocaleString('es-AR')}</div>`;
+    } else if (sale.paymentMethod === 'Mixto') {
+        if (sale.mixedCash)     paymentHtml += `<div class="payment-line">💵 Efectivo: $${sale.mixedCash.toLocaleString('es-AR')}</div>`;
+        if (sale.mixedTransfer) paymentHtml += `<div class="payment-line">📱 Transf: $${sale.mixedTransfer.toLocaleString('es-AR')}</div>`;
+    }
+
+    const date = new Date(sale.date).toLocaleString('es-AR');
+
+    const oneCopy = `
+        <div class="ticket-copy">
+            <div class="header">
+                <div class="brand">🍕 LOCOS X LA PIZZA</div>
+                <div class="reprint-badge">⚠️ REIMPRESIÓN</div>
+                <div class="date">${date}</div>
+                <div class="ticket-num">TICKET #${sale.orderNumber}</div>
+            </div>
+            ${customerBlock}
+            <div class="items-block">${itemsHtml}</div>
+            <div class="total-row">
+                <span>TOTAL</span>
+                <span>$${sale.total.toLocaleString('es-AR')}</span>
+            </div>
+            ${paymentHtml}
+        </div>`;
+
+    const printWindow = window.open('', '_blank', 'width=420,height=750');
+    printWindow.document.write(`<!DOCTYPE html>
+<html><head>
+    <meta charset="UTF-8">
+    <title>Reimpresión #${sale.orderNumber}</title>
+    <style>
+        * { margin:0; padding:0; box-sizing:border-box; }
+        body { font-family:'Courier New',monospace; font-size:11px; color:#000; background:#fff; width:80mm; }
+        .ticket-copy  { padding:6px 8px; }
+        .header       { text-align:center; border-bottom:2px dashed #000; padding-bottom:8px; margin-bottom:8px; }
+        .brand        { font-size:15px; font-weight:bold; text-transform:uppercase; }
+        .reprint-badge{ font-size:11px; font-weight:bold; margin-top:4px; border:1px dashed #000; display:inline-block; padding:1px 8px; letter-spacing:1px; }
+        .date         { font-size:10px; margin-top:4px; }
+        .ticket-num   { font-size:20px; font-weight:bold; text-transform:uppercase; margin-top:5px; letter-spacing:1px; }
+        .customer-block { font-size:11px; margin-bottom:8px; line-height:1.7; }
+        .order-type   { font-weight:bold; font-size:12px; margin-bottom:3px; }
+        .items-block  { margin-bottom:6px; }
+        .item-row     { display:flex; justify-content:space-between; font-size:15px; font-weight:bold; text-transform:uppercase; margin-top:8px; line-height:1.4; }
+        .item-name    { flex:1; padding-right:6px; }
+        .item-price   { white-space:nowrap; }
+        .unit-price   { font-size:10px; font-weight:normal; text-align:right; color:#444; margin-bottom:2px; }
+        .variety-line { font-size:14px; font-weight:bold; text-transform:uppercase; line-height:1.8; padding-left:4px; }
+        .notes-line   { font-size:13px; font-weight:bold; text-transform:uppercase; line-height:1.8; padding-left:4px; border-left:3px solid #000; margin-top:3px; }
+        .total-row    { display:flex; justify-content:space-between; font-size:15px; font-weight:bold; border-top:2px dashed #000; padding-top:6px; margin-top:8px; }
+        .payment-line { font-size:11px; text-align:right; margin-top:3px; }
+        .cut-line     { text-align:center; font-size:11px; margin:6px 0; letter-spacing:3px; }
+        @media print  { @page { margin:0; size:80mm auto; } body { width:80mm; } }
+    </style>
+</head>
+<body>
+    ${oneCopy}
+    <div class="cut-line">- - - - - - - - - - - - - - - - - -</div>
+    ${oneCopy}
+    <script>
+        window.onload = function() {
+            setTimeout(function() {
+                window.print();
+                setTimeout(function() { window.close(); }, 1500);
+            }, 300);
+        };
+    <\/script>
+</body></html>`);
+    printWindow.document.close();
 }
 
 function anularVenta(id) {
