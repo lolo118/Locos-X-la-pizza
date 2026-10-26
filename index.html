@@ -132,7 +132,7 @@
         .btn-delete { background: none; border: none; color: var(--danger); cursor: pointer; font-size: 18px; padding: 5px; }
         
         .total-display { font-size: 32px; font-weight: bold; text-align: right; margin-bottom: 20px; }
-        .payment-methods { display: flex; gap: 10px; margin-bottom: 20px; }
+        .payment-methods { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 20px; }
         .pay-btn { flex: 1; padding: 10px; background: #333; border: 1px solid #444; color: white; border-radius: 5px; cursor: pointer; min-height: 48px; }
         .pay-btn.selected { background: var(--primary); border-color: var(--primary); }
         
@@ -362,6 +362,19 @@
                 <button class="pay-btn" onclick="setPayment('Transferencia', this)">📱 Transf.</button>
                 <button class="pay-btn" onclick="setPayment('Tarjeta', this)">💳 Tarjeta</button>
                 <button class="pay-btn" id="pay-btn-mixto" onclick="setPayment('Mixto', this)">💵+📱 Mixto</button>
+                <button class="pay-btn" id="pay-btn-consumo" style="display:none; flex-basis:100%;" onclick="setPayment('Consumo propio', this)">🍽️ Consumo propio</button>
+            </div>
+
+            <!-- Consumo propio (TRUCK): pizzas para empleados o dueños. No es venta: no suma a la caja. -->
+            <div id="consumo-container" style="display:none; background:#2a2a2a; border-radius:8px; padding:12px; margin-bottom:8px;">
+                <div style="font-size:13px; color:var(--text-muted); margin-bottom:8px;">¿Para quién es?</div>
+                <div style="display:flex; gap:8px; margin-bottom:8px;">
+                    <button type="button" class="pay-btn consumo-para-btn selected" id="consumo-para-empleado" onclick="setConsumoPara('empleado')">👷 Empleado</button>
+                    <button type="button" class="pay-btn consumo-para-btn" id="consumo-para-dueno" onclick="setConsumoPara('dueno')">👑 Dueño</button>
+                </div>
+                <input type="text" id="consumo-nombre" placeholder="Nombre (opcional)" maxlength="40"
+                    style="width:100%; box-sizing:border-box; padding:8px; background:#333; border:1px solid #555; color:white; border-radius:6px; font-size:14px;">
+                <div id="consumo-valor" style="font-size:12px; color:var(--text-muted); margin-top:8px;">No se cobra ni suma a la caja.</div>
             </div>
 
             <div class="cash-input active" id="cash-input-container">
@@ -441,6 +454,7 @@
                 <option value="Efectivo">Efectivo</option>
                 <option value="Transferencia">Transferencia</option>
                 <option value="Tarjeta">Tarjeta</option>
+                <option value="Consumo propio">🍽️ Consumo propio</option>
             </select>
             <select id="hist-filter-type" style="padding: 8px; background: #333; color: white; border: 1px solid #555; border-radius: 4px;" onchange="renderHistory()">
                 <option value="all">Todos los tipos</option>
@@ -589,6 +603,13 @@
             <h3 style="margin-bottom:15px;">📍 Ventas por Sucursal</h3>
             <div id="rep-branches" style="margin-top:10px;"></div>
         </div>
+    </div>
+
+    <!-- Consumo propio (empleados / dueños): no es venta, no suma en los totales de arriba -->
+    <div id="rep-consumo-card" style="display:none; background:var(--bg-panel); padding:20px; border-radius:8px; margin-bottom:20px;">
+        <h3 style="margin-bottom:6px;">🍽️ Consumo propio</h3>
+        <div style="font-size:12px; color:var(--text-muted); margin-bottom:12px;">Pizzas para empleados y dueños. No son ventas y no suman en los totales.</div>
+        <div id="rep-consumo"></div>
     </div>
 
     <!-- Gráfico de ventas por día -->
@@ -1050,6 +1071,8 @@ const branchConfig = {
         categories: ['pizza'],
         // Empanadas solo por unidad (no se ofrecen en Caja del truck, se conserva por compatibilidad)
         empanadaSizes: ['unidad'],
+        // Permite registrar "Consumo propio" (pizzas para empleados / dueños) desde Caja, sin cobrar
+        consumoPropio: true,
         // PRODUCTOS DIRECTOS: la Caja del truck muestra estos 3 botones en lugar de categorías.
         // Cada uno es una pizza de la variedad que se elija después; el precio se guarda por variedad
         // en el campo `field` de cada pizza (editable en la pestaña Productos).
@@ -1077,6 +1100,45 @@ function directProductPrice(pizza, dp) {
 // Devuelve la config simplificada de la sucursal actual (o null si es sucursal completa)
 function getBranchConfig() {
     return branchConfig[currentBranch] || null;
+}
+
+// ── CONSUMO PROPIO (TRUCK) ──────────────────────────────────────
+// Pizzas para empleados o dueños. Se guardan como pedido con status 'consumo' y total $0,
+// así quedan fuera de ventas, caja, reportes y cierre de turno (todos filtran status 'completed').
+// Los ítems conservan su precio de lista solo como referencia (valorLista).
+const CONSUMO_METHOD = 'Consumo propio';
+const CONSUMO_PARA_LABELS = { empleado: '👷 Empleado', dueno: '👑 Dueño' };
+let consumoPara = 'empleado';
+
+function consumoPropioEnabled() {
+    const cfg = getBranchConfig();
+    return !!(cfg && cfg.consumoPropio);
+}
+
+function setConsumoPara(para) {
+    consumoPara = para;
+    document.querySelectorAll('.consumo-para-btn').forEach(b => b.classList.remove('selected'));
+    const btn = document.getElementById('consumo-para-' + para);
+    if (btn) btn.classList.add('selected');
+}
+
+function consumoLabel(sale) {
+    return (CONSUMO_PARA_LABELS[sale.consumoPara] || '🍽️ Consumo') + (sale.consumoNombre ? ' · ' + sale.consumoNombre : '');
+}
+
+// Agrupa una lista de consumos: cantidad de pedidos, por quién, valor de lista y unidades por producto
+function resumirConsumos(list) {
+    const r = { pedidos: list.length, empleado: 0, dueno: 0, valorLista: 0, unidades: 0, productos: {} };
+    list.forEach(s => {
+        if (s.consumoPara === 'dueno') r.dueno++; else r.empleado++;
+        r.valorLista += Number(s.valorLista) || 0;
+        (s.items || []).forEach(i => {
+            const name = i.desc && i.type === 'pizza' ? `${i.title} ${i.desc}` : i.title;
+            r.productos[name] = (r.productos[name] || 0) + (i.qty || 0);
+            r.unidades += i.qty || 0;
+        });
+    });
+    return r;
 }
 
 // Devuelve la lista de pizzas visibles para la sucursal actual (filtrada si corresponde)
@@ -2645,6 +2707,15 @@ function updateOrder() {
     const canCharge = currentOrder.length > 0 && orderMetadata.orderNumber !== null;
     document.getElementById('btn-cobrar').disabled = !canCharge;
 
+    // Consumo propio: solo en sucursales que lo permiten (TRUCK)
+    const consumoBtn = document.getElementById('pay-btn-consumo');
+    if (consumoBtn) consumoBtn.style.display = consumoPropioEnabled() ? '' : 'none';
+    if (paymentMethod === CONSUMO_METHOD && !consumoPropioEnabled()) {
+        setPayment('Efectivo', document.getElementById('pay-btn-efectivo'));
+    }
+    const consumoValor = document.getElementById('consumo-valor');
+    if (consumoValor) consumoValor.innerText = `No se cobra ni suma a la caja. Valor de lista: ${formatMoney(total)} (solo referencia).`;
+
     // Show/hide tiempo estimado widget
     const tiempoContainer = document.getElementById('tiempo-estimado-container');
     if (tiempoContainer) {
@@ -2677,6 +2748,15 @@ function setPayment(method, btn) {
     if(btn) btn.classList.add('selected');
     const cashInput  = document.getElementById('cash-input-container');
     const mixedInput = document.getElementById('mixed-payment-container');
+    const consumoInput = document.getElementById('consumo-container');
+    if (consumoInput) consumoInput.style.display = method === CONSUMO_METHOD ? 'block' : 'none';
+    const btnCobrar = document.getElementById('btn-cobrar');
+    if (btnCobrar) btnCobrar.innerHTML = method === CONSUMO_METHOD ? '🍽️ REGISTRAR CONSUMO' : 'COBRAR';
+    if (method === CONSUMO_METHOD) {
+        setConsumoPara('empleado');
+        const nom = document.getElementById('consumo-nombre');
+        if (nom) nom.value = '';
+    }
     if (method === 'Efectivo') {
         cashInput.classList.add('active');
         if (mixedInput) mixedInput.style.display = 'none';
@@ -2735,7 +2815,9 @@ function calculateChange() {
 
 async function processPayment() {
     if (currentOrder.length === 0 || !orderMetadata.orderNumber) return;
-    let total = currentOrder.reduce((sum, item) => sum + item.subtotal, 0);
+    const esConsumo = paymentMethod === CONSUMO_METHOD && consumoPropioEnabled();
+    const valorLista = currentOrder.reduce((sum, item) => sum + item.subtotal, 0);
+    let total = esConsumo ? 0 : valorLista;
     
     const btnCobrar = document.getElementById('btn-cobrar');
     btnCobrar.disabled = true;
@@ -2764,7 +2846,7 @@ async function processPayment() {
         mixedCard: paymentMethod === 'Mixto' ? mixedCardAmt : null,
         cashReceived: cashReceived || null,
         changeGiven: changeGiven || null,
-        status: 'completed',
+        status: esConsumo ? 'consumo' : 'completed',
         orderNumber: orderMetadata.orderNumber,
         orderType: orderMetadata.orderType,
         customerName: orderMetadata.customerName,
@@ -2779,6 +2861,13 @@ async function processPayment() {
         // Nº local correlativo del equipo: solo existe cuando el pedido salió con número provisorio (sin conexión)
         localSeq: localSeqFor(orderMetadata.orderNumber) || null
     };
+    if (esConsumo) {
+        const nom = document.getElementById('consumo-nombre');
+        sale.consumoPara = consumoPara;
+        sale.consumoNombre = nom ? nom.value.trim() : '';
+        sale.valorLista = valorLista;
+        sale.pagado = true;
+    }
 
     showLoading('Procesando pago...');
     try {
@@ -2847,7 +2936,9 @@ async function processPayment() {
         `).join('');
         document.getElementById('ticket-total-amount').innerText = formatMoney(total);
         let paymentText = `Pago: ${paymentMethod}`;
-        if (paymentMethod === 'Efectivo' && cashReceived > 0) {
+        if (esConsumo) {
+            paymentText = `🍽️ CONSUMO PROPIO · ${consumoLabel(sale)} · Sin cargo (valor de lista ${formatMoney(valorLista)})`;
+        } else if (paymentMethod === 'Efectivo' && cashReceived > 0) {
             paymentText += ` | Recibido: ${formatMoney(cashReceived)} | Vuelto: ${formatMoney(changeGiven)}`;
         } else if (paymentMethod === 'Mixto') {
             let parts = [];
@@ -2875,7 +2966,7 @@ async function processPayment() {
     } finally {
         hideLoading();
         btnCobrar.disabled = false;
-        btnCobrar.innerHTML = 'COBRAR';
+        btnCobrar.innerHTML = paymentMethod === CONSUMO_METHOD ? '🍽️ REGISTRAR CONSUMO' : 'COBRAR';
     }
 }
 
@@ -3165,7 +3256,7 @@ function renderHistory() {
     const todayStr = new Date().toLocaleDateString('es-AR');
     
     const searchVal = (document.getElementById('hist-search')?.value || '').toLowerCase().trim();
-    let filtered = sales.filter(s => s.status === 'completed');
+    let filtered = sales.filter(s => s.status === 'completed' || s.status === 'consumo');
 
     // Filtro de búsqueda — número de ticket, cliente, dirección, teléfono
     if (searchVal) {
@@ -3175,7 +3266,9 @@ function renderHistory() {
             const telefono = (s.customerPhone || '').toLowerCase();
             const calle    = (s.customerAddress?.street || '').toLowerCase();
             const barrio   = (s.customerAddress?.barrio || '').toLowerCase();
+            const consumo  = (s.consumoNombre || '').toLowerCase();
             return nro.includes(searchVal)
+                || consumo.includes(searchVal)
                 || nombre.includes(searchVal)
                 || telefono.includes(searchVal)
                 || calle.includes(searchVal)
@@ -3217,8 +3310,11 @@ function renderHistory() {
         let badgeClass = s.orderType === 'delivery' ? 'badge-delivery' : (s.orderType === 'retiro' ? 'badge-retiro' : 'badge-mostrador');
         let typeLabel = s.orderType ? s.orderType.toUpperCase() : 'N/A';
         // Default to false for legacy sales that don't have the field
-        const pagado = s.pagado === true;
-        const pagadoBadge = (pagado
+        const esConsumo = s.status === 'consumo';
+        const pagado = esConsumo || s.pagado === true;
+        const pagadoBadge = (esConsumo
+            ? `<span style="display:inline-block; background:#f1c40f; color:#222; font-size:10px; font-weight:bold; padding:2px 8px; border-radius:10px; margin-left:6px;">🍽️ CONSUMO PROPIO · ${consumoLabel(s)}</span>`
+            : pagado
             ? '<span style="display:inline-block; background:var(--success); color:white; font-size:10px; font-weight:bold; padding:2px 8px; border-radius:10px; margin-left:6px;">✅ PAGADO</span>'
             : '<span style="display:inline-block; background:#e67e22; color:white; font-size:10px; font-weight:bold; padding:2px 8px; border-radius:10px; margin-left:6px;">⏳ NO PAGADO</span>')
             + (s._pending ? '<span title="Guardada en este equipo, todavía no llegó al servidor" style="display:inline-block; background:#2c3e50; color:#9ad; font-size:10px; font-weight:bold; padding:2px 8px; border-radius:10px; margin-left:6px;">🔄 POR SINCRONIZAR</span>' : '')
@@ -3235,10 +3331,12 @@ function renderHistory() {
                         ${s.orderType === 'delivery' && (s.cadete || '') ? `<div style="font-size:12px; color:#ccc; margin-top:2px;">🛵 ${s.cadete} · ${s.cadetePagado ? '✅ Pagado' : '⏳ Pago pendiente'}</div>` : ''}
                         ${s.orderType === 'delivery' && !s.cadete ? `<div style="font-size:12px; color:#e67e22; margin-top:2px;">🛵 Sin cadete asignado</div>` : ''}
                     </div>
-                    <div style="font-size:18px; font-weight:bold; color:var(--success)">${formatMoney(s.total)}</div>
+                    ${esConsumo
+                        ? `<div style="text-align:right;"><div style="font-size:18px; font-weight:bold; color:#f1c40f">Sin cargo</div><div style="font-size:11px; color:var(--text-muted)">lista ${formatMoney(s.valorLista || 0)}</div></div>`
+                        : `<div style="font-size:18px; font-weight:bold; color:var(--success)">${formatMoney(s.total)}</div>`}
                 </div>
                 <div class="history-details" onclick="event.stopPropagation()">
-                    <div style="margin-bottom:12px; background:#333; border-radius:8px; padding:10px 12px;">
+                    <div style="margin-bottom:12px; background:#333; border-radius:8px; padding:10px 12px;${esConsumo ? ' display:none;' : ''}">
                         <div style="font-size:13px; color:#aaa; margin-bottom:6px;">💰 Estado de pago</div>
                         <button style="width:100%; padding:8px; background:${pagado ? 'var(--success)' : '#e67e22'}; color:white; border:none; border-radius:6px; cursor:pointer; font-size:13px; font-weight:bold;" onclick="event.stopPropagation(); togglePagado('${s.id}')">
                             ${pagado ? '✅ PAGADO (click para marcar como no pagado)' : '⏳ NO PAGADO (click para marcar como pagado)'}
@@ -3261,8 +3359,8 @@ function renderHistory() {
                     ${s.items.map(i => `<div>${i.qty}x ${i.title} - ${formatMoney(i.subtotal)}</div>`).join('')}
                     <div style="display:flex; gap:8px; margin-top:10px; flex-wrap:wrap;">
                         <button style="flex:1; min-width:140px; padding:6px 10px; background:#555; color:white; border:none; border-radius:4px; cursor:pointer; font-size:13px; font-weight:bold;" onclick="event.stopPropagation(); reprintTicket('${s.id}')">🖨️ Reimprimir</button>
-                        <button style="flex:1; min-width:140px; padding:6px 10px; background:#2980b9; color:white; border:none; border-radius:4px; cursor:pointer; font-size:13px; font-weight:bold;" onclick="event.stopPropagation(); cambiarMetodoPago('${s.id}', '${s.paymentMethod}')">💳 Cambiar pago</button>
-                        <button style="flex:1; min-width:140px; padding:6px 10px; background:#16a085; color:white; border:none; border-radius:4px; cursor:pointer; font-size:13px; font-weight:bold;" onclick="event.stopPropagation(); cambiarTipoPedido('${s.id}', '${s.orderType || ''}')">🔄 Cambiar tipo</button>
+                        ${esConsumo ? '' : `<button style="flex:1; min-width:140px; padding:6px 10px; background:#2980b9; color:white; border:none; border-radius:4px; cursor:pointer; font-size:13px; font-weight:bold;" onclick="event.stopPropagation(); cambiarMetodoPago('${s.id}', '${s.paymentMethod}')">💳 Cambiar pago</button>`}
+                        ${esConsumo ? '' : `<button style="flex:1; min-width:140px; padding:6px 10px; background:#16a085; color:white; border:none; border-radius:4px; cursor:pointer; font-size:13px; font-weight:bold;" onclick="event.stopPropagation(); cambiarTipoPedido('${s.id}', '${s.orderType || ''}')">🔄 Cambiar tipo</button>`}
                         ${userRole === 'admin' ? `<button class="btn-delete" style="flex:1; min-width:140px; border:1px solid var(--danger); border-radius:4px; padding:6px 10px; font-size:13px;" onclick="anularVenta('${s.id}')">Anular Venta</button>` : ''}
                     </div>
                 </div>
@@ -3361,6 +3459,10 @@ function reprintTicket(saleId) {
         if (sale.mixedCash)     pagoHtml += `<div class="pago-linea">Efectivo: $${fmt(sale.mixedCash)}</div>`;
         if (sale.mixedTransfer) pagoHtml += `<div class="pago-linea">Transf: $${fmt(sale.mixedTransfer)}</div>`;
         if (sale.mixedCard)     pagoHtml += `<div class="pago-linea">Tarjeta: $${fmt(sale.mixedCard)}</div>`;
+    } else if (sale.status === 'consumo') {
+        pagoHtml = `<div class="pago-linea">CONSUMO PROPIO - SIN CARGO</div>`
+            + `<div class="pago-linea">Para: ${sale.consumoPara === 'dueno' ? 'Dueño' : 'Empleado'}${sale.consumoNombre ? ' - ' + sale.consumoNombre : ''}</div>`
+            + `<div class="pago-linea">Valor de lista: $${fmt(sale.valorLista || 0)}</div>`;
     }
 
     // ── Items comanda cocina (sin precios) ────────────────────────
@@ -3846,8 +3948,7 @@ function renderReports() {
 
     const turnoFilter = document.getElementById('rep-filter-turno')?.value || 'all-turnos';
 
-    let validSales = sales.filter(s => {
-        if (s.status !== 'completed') return false;
+    const matchesFilters = s => {
         if (filter === 'turno-actual') {
             if (!currentTurno) return false;
             return s.turnoId === currentTurno.id;
@@ -3856,7 +3957,32 @@ function renderReports() {
         if (branchFilter !== 'all' && s.branch !== branchFilter) return false;
         if (turnoFilter !== 'all-turnos' && s.turnoId !== turnoFilter) return false;
         return true;
-    });
+    };
+    let validSales = sales.filter(s => s.status === 'completed' && matchesFilters(s));
+
+    // Consumo propio (empleados / dueños): se muestra aparte, no suma en ninguna cifra de ventas
+    const consumos = sales.filter(s => s.status === 'consumo' && matchesFilters(s));
+    const consumoCard = document.getElementById('rep-consumo-card');
+    if (consumoCard) {
+        consumoCard.style.display = (consumoPropioEnabled() || consumos.length > 0) ? 'block' : 'none';
+        const c = resumirConsumos(consumos);
+        document.getElementById('rep-consumo').innerHTML = c.pedidos === 0
+            ? '<p style="color:#666">Sin consumos en el período</p>'
+            : `
+            <div style="display:flex; gap:20px; flex-wrap:wrap; margin-bottom:12px; font-size:14px;">
+                <div><strong style="font-size:20px; color:var(--primary);">${c.unidades}</strong> productos en ${c.pedidos} pedido${c.pedidos > 1 ? 's' : ''}</div>
+                <div>👷 Empleados: <strong>${c.empleado}</strong></div>
+                <div>👑 Dueños: <strong>${c.dueno}</strong></div>
+                <div style="color:var(--text-muted);">Valor de lista: ${formatMoney(c.valorLista)}</div>
+            </div>
+            <ul style="list-style:none; line-height:1.8;">
+                ${Object.entries(c.productos).sort((a, b) => b[1] - a[1]).map(([name, qty]) => `
+                    <li style="display:flex; justify-content:space-between; border-bottom:1px solid #444; padding:6px 0;">
+                        <span style="font-size:14px;">${name}</span>
+                        <strong style="color:var(--primary);">${qty}</strong>
+                    </li>`).join('')}
+            </ul>`;
+    }
 
     // KPIs básicos
     const total = validSales.reduce((sum, s) => sum + s.total, 0);
@@ -4746,6 +4872,10 @@ function printTicket() {
         if (sale.mixedCash)     pagoHtml += `<div class="pago-linea">Efectivo: $${fmt(sale.mixedCash)}</div>`;
         if (sale.mixedTransfer) pagoHtml += `<div class="pago-linea">Transf: $${fmt(sale.mixedTransfer)}</div>`;
         if (sale.mixedCard)     pagoHtml += `<div class="pago-linea">Tarjeta: $${fmt(sale.mixedCard)}</div>`;
+    } else if (sale.status === 'consumo') {
+        pagoHtml = `<div class="pago-linea">CONSUMO PROPIO - SIN CARGO</div>`
+            + `<div class="pago-linea">Para: ${sale.consumoPara === 'dueno' ? 'Dueño' : 'Empleado'}${sale.consumoNombre ? ' - ' + sale.consumoNombre : ''}</div>`
+            + `<div class="pago-linea">Valor de lista: $${fmt(sale.valorLista || 0)}</div>`;
     }
 
     // ── Items comanda cocina (sin precios) ────────────────────────
@@ -4927,7 +5057,7 @@ function renderComandas() {
 
     // Pedidos del turno actual pendientes (status completed, kitchenStatus != done)
     const pendientes = sales
-        .filter(s => s.status === 'completed'
+        .filter(s => (s.status === 'completed' || s.status === 'consumo')
             && s.kitchenStatus !== 'done'
             && (currentTurno ? s.turnoId === currentTurno.id : true))
         .sort((a, b) => new Date(a.date) - new Date(b.date));
@@ -4964,6 +5094,9 @@ function renderComandas() {
         let clienteHtml = '';
         if (sale.customerName) {
             clienteHtml = `<div style="font-size:1.1rem; color:#ccc; margin-top:2px;">👤 ${sale.customerName}</div>`;
+        }
+        if (sale.status === 'consumo') {
+            clienteHtml += `<div style="font-size:1.1rem; color:#f1c40f; font-weight:bold; margin-top:2px;">🍽️ CONSUMO PROPIO · ${consumoLabel(sale)}</div>`;
         }
 
         // Cadete - se gestiona desde Historial, no desde Comandas
@@ -5453,6 +5586,18 @@ async function mostrarResumenCaja() {
             return true;
         });
 
+        // Consumo propio con los mismos filtros (aparte: no suma a ventas ni al efectivo)
+        const consumosTurno = sales.filter(s => {
+            if (s.status !== 'consumo') return false;
+            if (!filterAllTurnos && (!filterTurnoId || s.turnoId !== filterTurnoId)) return false;
+            if (dateFilter === 'today' && new Date(s.date).toLocaleDateString('es-AR') !== todayStr) return false;
+            if (dateFilter === 'yesterday' && new Date(s.date).toLocaleDateString('es-AR') !== ayerStr) return false;
+            return true;
+        });
+        const consumo = resumirConsumos(consumosTurno);
+        const consumoProductos = Object.entries(consumo.productos).sort((a, b) => b[1] - a[1]);
+        const mostrarConsumo = consumoPropioEnabled() || consumo.pedidos > 0;
+
         let efectivo = 0, transferencia = 0, tarjeta = 0, mixtoEf = 0, mixtoTr = 0, mixtoTar = 0;
         ventasTurno.forEach(s => {
             if (s.paymentMethod === 'Efectivo') efectivo += s.total;
@@ -5511,6 +5656,15 @@ async function mostrarResumenCaja() {
                 <div style="display:flex;justify-content:space-between;font-size:16px;font-weight:bold;border-top:1px dashed #555;padding-top:8px;margin-top:4px;"><span>TOTAL VENTAS</span><span style="color:var(--success);">${formatMoney(totalVentas)}</span></div>
             </div>
 
+            ${mostrarConsumo ? `<div style="background:#2a2a2a;border-radius:8px;padding:14px;margin-bottom:14px;">
+                <div style="font-size:13px;color:#aaa;margin-bottom:4px;">🍽️ CONSUMO PROPIO (${consumo.pedidos} pedidos)</div>
+                <div style="font-size:11px;color:#777;margin-bottom:10px;">Empleados y dueños. No suma a ventas ni a la caja.</div>
+                ${consumo.pedidos === 0 ? '<div style="color:#666;font-size:13px;">Sin consumos</div>' : `
+                ${consumoProductos.map(([name, qty]) => `<div style="display:flex;justify-content:space-between;font-size:13px;padding:3px 0;"><span>${name}</span><span>${qty}</span></div>`).join('')}
+                <div style="display:flex;justify-content:space-between;font-size:13px;margin-top:8px;padding-top:8px;border-top:1px dashed #555;"><span>👷 Empleados / 👑 Dueños</span><span>${consumo.empleado} / ${consumo.dueno}</span></div>
+                <div style="display:flex;justify-content:space-between;font-size:13px;margin-top:4px;color:#aaa;"><span>Valor de lista (referencia)</span><span>${formatMoney(consumo.valorLista)}</span></div>`}
+            </div>` : ''}
+
             <div style="background:#2a2a2a;border-radius:8px;padding:14px;margin-bottom:14px;">
                 <div style="font-size:13px;color:#aaa;margin-bottom:10px;">MOVIMIENTOS</div>
                 ${movHtml}
@@ -5532,7 +5686,7 @@ async function mostrarResumenCaja() {
             </div>`;
 
         // Store data for print
-        box._resumenData = { apertura, cierre, ventasTurno, totalEfectivo, totalTransferencia, totalTarjeta, totalVentas, movList, ingresos, egresos, totalEfectivoFinal };
+        box._resumenData = { apertura, cierre, ventasTurno, mostrarConsumo, consumo, consumoProductos, totalEfectivo, totalTransferencia, totalTarjeta, totalVentas, movList, ingresos, egresos, totalEfectivoFinal };
     }
 
     // Wire up filter changes
@@ -5567,6 +5721,10 @@ async function mostrarResumenCaja() {
                 <div class="row"><span>Transferencia</span><span>${formatMoney(d.totalTransferencia||0)}</span></div>
                 <div class="row"><span>Tarjeta</span><span>${formatMoney(d.totalTarjeta||0)}</span></div>
                 <div class="row total"><span>TOTAL VENTAS</span><span>${formatMoney(d.totalVentas||0)}</span></div>
+                ${d.mostrarConsumo ? `<div class="subtitulo">CONSUMO PROPIO (${d.consumo.pedidos} pedidos, sin cargo)</div>
+                ${d.consumoProductos.map(([name, qty]) => `<div class="row"><span>${name}</span><span>${qty}</span></div>`).join('') || '<div style="font-size:11px;">Sin consumos</div>'}
+                ${d.consumo.pedidos > 0 ? `<div class="row"><span>Empleados / Dueños</span><span>${d.consumo.empleado} / ${d.consumo.dueno}</span></div>
+                <div class="row"><span>Valor de lista</span><span>${formatMoney(d.consumo.valorLista)}</span></div>` : ''}` : ''}
                 <div class="subtitulo">MOVIMIENTOS</div>
                 ${(d.movList||[]).map(m => `<div class="row"><span>${m.tipo === 'ingreso' ? '+' : '-'} ${m.concepto || m.tipo}</span><span>${formatMoney(m.monto)}</span></div>`).join('')}
                 ${(d.movList||[]).length > 0 ? `<div class="row"><span>Ingresos</span><span>+${formatMoney(d.ingresos||0)}</span></div><div class="row"><span>Egresos</span><span>-${formatMoney(d.egresos||0)}</span></div>` : '<div style="font-size:11px;">Sin movimientos</div>'}
