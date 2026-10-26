@@ -1,0 +1,54 @@
+// Reglas de seguridad de Firestore (proyecto locos-x-la-pizza).
+// Copia de las reglas publicadas en la consola al 2026-10-26. Para publicar cambios:
+//   firebase deploy --only firestore:rules
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isAdmin() {
+      return request.auth != null &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    match /users/{userId} {
+      allow read: if isAuthenticated();
+      allow create, update, delete: if isAdmin();
+    }
+
+    // Contadores de números de pedido por sucursal (sucursal1, sucursal2, sucursal3 = TRUCK).
+    // La app reserva bloques con una transacción sobre counters/{sucursal}.lastOrder.
+    match /counters/{document=**} {
+      allow read, write: if isAuthenticated();
+    }
+
+    // REGLA CLAVE — cubre branches Y su subcolección sales
+    match /branches/{branchId} {
+      allow read, write: if isAuthenticated();
+
+      match /sales/{saleId} {
+        allow read, write: if isAuthenticated();
+      }
+    }
+
+    match /turnos/{turnoId} {
+      allow read: if isAuthenticated();
+      allow create, update: if isAuthenticated();
+      allow delete: if isAdmin();
+    }
+
+    match /movimientos/{branchId}/items/{itemId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update, delete: if isAdmin();
+    }
+
+    match /config/{document=**} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+  }
+}
