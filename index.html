@@ -202,6 +202,7 @@
         .prod-table td { padding:4px 5px; border-bottom:1px solid #222; vertical-align:middle; }
         .prod-table tr:hover td { background:rgba(255,255,255,0.02); }
         .prod-input { width:88px; padding:7px 6px; background:#2a2a2a; border:1px solid #555; color:white; border-radius:4px; font-size:14px; text-align:right; }
+        .prod-unit { font-size:11px; color:#888; margin-top:3px; text-align:right; }
         .prod-input::placeholder { color:#666; font-style:italic; }
         .prod-input-text { width:100%; min-width:150px; padding:7px 8px; background:#2a2a2a; border:1px solid #555; color:white; border-radius:4px; font-size:14px; }
         .prod-input-emoji { width:56px; text-align:center; font-size:20px; padding:4px; background:#2a2a2a; border:1px solid #555; color:white; border-radius:4px; }
@@ -501,7 +502,10 @@
 
     <!-- REPORTES SECTION -->
     <div id="reportes" class="section" style="flex-direction: column;">
-    <h2 class="step-title">📊 Reportes</h2>
+    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+        <h2 class="step-title">📊 Reportes</h2>
+        <button class="btn" style="width:auto; padding:10px 16px;" onclick="mostrarExportarEmpanadas()">📥 Exportar empanadas (Excel)</button>
+    </div>
 
     <!-- Filtros -->
     <div style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:20px; align-items:center;">
@@ -1141,14 +1145,26 @@ function empanadaVarietyPrice(v, size) {
     return db.empanadas[size];
 }
 
+// Precio unitario de una variedad dentro de una caja: precio de la caja de esa variedad / 6 o / 12.
+function empanadaUnitInPack(v, size) {
+    return empanadaVarietyPrice(v, size) / (size === 'media' ? 6 : 12);
+}
+
 // Precio de la caja (media docena / docena) que se está armando:
-// si TODA la caja es de una sola variedad con precio especial, usa ese precio; si es surtida, el precio general.
+// suma el precio unitario dentro de la caja de cada empanada, así una caja surtida
+// (ej. 6 carne + 6 verdura) cobra la parte proporcional de cada variedad.
+// Los lugares todavía vacíos se cuentan al precio general.
 function calculateEmpanadaPackPrice() {
     const size = flowState.size;
-    const general = db.empanadas[size];
-    const present = getEmpanadaVarieties().filter(v => (flowState.empSplit[v.key] || 0) > 0);
-    if (present.length === 1) return empanadaVarietyPrice(present[0], size);
-    return general;
+    const req = size === 'media' ? 6 : 12;
+    let total = 0, count = 0;
+    getEmpanadaVarieties().forEach(v => {
+        const n = flowState.empSplit[v.key] || 0;
+        total += n * empanadaUnitInPack(v, size);
+        count += n;
+    });
+    if (count < req) total += (req - count) * db.empanadas[size] / req;
+    return Math.round(total);
 }
 
 // Genera una clave interna única a partir del nombre de una variedad ("Jamón y Queso" -> "jamon_y_queso")
@@ -2155,7 +2171,7 @@ function renderFlow() {
                     <div style="background:#333; padding:10px; border-radius:8px; margin-top:12px; text-align:center;">
                         <span style="color:var(--text-muted)">Precio por caja:</span>
                         <strong style="color:var(--primary); font-size:20px;">${formatMoney(packPrice)}</strong>
-                        ${packEspecial ? `<div style="font-size:12px; color:#f39c12; margin-top:4px;">Precio especial por ser toda de una sola variedad</div>` : ''}
+                        ${packEspecial ? `<div style="font-size:12px; color:#f39c12; margin-top:4px;">Precio según las variedades elegidas</div>` : ''}
                     </div>
                     <div class="quantity-selector" style="margin-top:20px;">
                         <span style="font-size:14px; color:#aaa; margin-right:10px;">Cajas:</span>
@@ -2462,12 +2478,17 @@ function addEmpanadaPack() {
         .filter(v => (flowState.empSplit[v.key] || 0) > 0)
         .map(v => `${v.name} x${flowState.empSplit[v.key]}`)
         .join(' / ');
-    // Precio según composición (especial si es toda de una variedad con precio propio)
+    // Precio según composición (suma del precio unitario de cada variedad dentro de la caja)
     const price = calculateEmpanadaPackPrice();
+    // Desglose por variedad (lo usa la exportación a Excel)
+    const empBreakdown = varieties
+        .filter(v => (flowState.empSplit[v.key] || 0) > 0)
+        .map(v => ({ name: v.name, qty: flowState.empSplit[v.key], unit: empanadaUnitInPack(v, flowState.size) }));
     currentOrder.push({
         type: 'empanada',
         title: `Empanadas - ${flowState.sizeName}`,
         desc: desc,
+        empBreakdown,
         qty: flowState.qty,
         unitPrice: price,
         subtotal: price * flowState.qty
@@ -4232,20 +4253,20 @@ function renderProdEmpanadas() {
         <tr>
             <td style="width:64px;"><input type="text" class="prod-input-emoji" maxlength="8" value="${escAttr(v.emoji || '')}" title="Emoji (opcional)" oninput="prodSetVariety(${i}, 'emoji', this.value)"></td>
             <td><input type="text" class="prod-input-text" value="${escAttr(v.name)}" placeholder="Nombre de la variedad" oninput="prodSetVariety(${i}, 'name', this.value)"></td>
-            ${sizes.map(s => `<td><input type="number" class="prod-input" value="${v[s] != null && v[s] !== '' ? v[s] : ''}" placeholder="${e[s] != null ? '$' + Number(e[s]).toLocaleString('es-AR') : '—'}" title="Vacío = usa el precio general" oninput="prodSetVariety(${i}, '${s}', this.value)"></td>`).join('')}
+            ${sizes.map(s => `<td><input type="number" class="prod-input" value="${v[s] != null && v[s] !== '' ? v[s] : ''}" placeholder="${e[s] != null ? '$' + Number(e[s]).toLocaleString('es-AR') : '—'}" title="Vacío = usa el precio general" oninput="prodSetVariety(${i}, '${s}', this.value)">${s !== 'unidad' ? `<div class="prod-unit" id="prod-unit-${i}-${s}">${prodUnitLabel(v, s)}</div>` : ''}</td>`).join('')}
             <td style="text-align:center;"><button class="prod-del" title="Eliminar variedad" onclick="prodDeleteVariety(${i})">🗑️</button></td>
         </tr>`).join('');
 
     panel.innerHTML = `
         <div class="prod-card">
             <h3>🥟 Precios generales de empanadas</h3>
-            <p class="prod-hint">Precio base por formato. Se usa para todas las variedades que no tengan un precio especial cargado abajo${multi ? ', y siempre para las cajas <strong>surtidas</strong> (mezcla de variedades)' : ''}.</p>
+            <p class="prod-hint">Precio base por formato. Se usa para todas las variedades que no tengan un precio especial cargado abajo.</p>
             <div class="prod-general">${generalInputs}</div>
         </div>
         <div class="prod-card">
             <h3>Variedades de empanadas</h3>
             <p class="prod-hint">Agregá, renombrá o eliminá variedades. Las columnas de precio son <strong>opcionales</strong>: dejalas vacías para usar el precio general (se muestra en gris). ${multi
-                ? 'Si cargás un precio especial, se aplica cuando la media docena o docena es <strong>toda de esa variedad</strong> (por ejemplo, docena solo de carne). Las cajas surtidas usan el precio general.'
+                ? 'El precio de media docena / docena de cada variedad define su <strong>precio unitario dentro de la caja</strong> (se muestra abajo, c/u). Las cajas surtidas suman el precio unitario de cada empanada: por ejemplo, con carne a $24.000 y verdura a $20.000 la docena, 6 de carne + 6 de verdura = $22.000.'
                 : 'Si cargás un precio especial, se usa para esa variedad.'}</p>
             <div style="overflow-x:auto;"><table class="prod-table">
                 <thead><tr><th>Emoji</th><th>Variedad</th>${sizes.map(s => `<th>${SIZE_LABEL[s]}<br><small style="font-weight:normal;text-transform:none;">(precio especial)</small></th>`).join('')}<th></th></tr></thead>
@@ -4255,10 +4276,25 @@ function renderProdEmpanadas() {
         </div>`;
 }
 
+// Texto "c/u $X" bajo el precio de media docena / docena de una variedad en Productos
+function prodUnitLabel(v, size) {
+    const box = v[size] != null && Number(v[size]) > 0 ? Number(v[size]) : prodDraft.empanadas[size];
+    if (box == null || isNaN(box)) return '';
+    return 'c/u ' + formatMoney(Math.round(box / (size === 'media' ? 6 : 12)));
+}
+
+function prodRefreshUnitLabels() {
+    prodDraft.empanadas.varieties.forEach((v, i) => ['media', 'docena'].forEach(s => {
+        const el = document.getElementById(`prod-unit-${i}-${s}`);
+        if (el) el.textContent = prodUnitLabel(v, s);
+    }));
+}
+
 function prodSetEmpGeneral(size, value) {
     const n = prodNum(value);
     if (n != null) prodDraft.empanadas[size] = n;
     markProdDirty();
+    prodRefreshUnitLabels();
 }
 
 function prodSetVariety(i, field, value) {
@@ -4267,6 +4303,7 @@ function prodSetVariety(i, field, value) {
     if (field === 'name' || field === 'emoji') v[field] = value;
     else { const n = prodNum(value); v[field] = (n != null && n > 0) ? n : null; } // vacío o 0 = usa precio general
     markProdDirty();
+    prodRefreshUnitLabels();
 }
 
 function prodAddVariety() {
@@ -5153,6 +5190,168 @@ async function registrarMovimiento(tipo) {
 }
 
 // --- RESUMEN DE CAJA ---
+// ── Exportar ventas de empanadas a Excel ──────────────────────────────
+// Descarga un .xlsx con dos hojas: "Detalle" (una fila por variedad de cada venta)
+// y "Resumen" (totales por sucursal y variedad). Lee las ventas de Firestore,
+// así que puede incluir varias sucursales a la vez.
+const XLSX_SRC = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+let xlsxLoading = null;
+function loadXlsx() {
+    if (window.XLSX) return Promise.resolve(window.XLSX);
+    if (!xlsxLoading) {
+        xlsxLoading = new Promise((resolve, reject) => {
+            const sc = document.createElement('script');
+            sc.src = XLSX_SRC;
+            sc.onload = () => resolve(window.XLSX);
+            sc.onerror = () => { xlsxLoading = null; reject(new Error('No se pudo cargar la librería de Excel')); };
+            document.head.appendChild(sc);
+        });
+    }
+    return xlsxLoading;
+}
+
+// Desarma un ítem del pedido en filas por variedad: [{ formato, variedad, cantidad, importe }]
+function empanadaRowsFromItem(item) {
+    if (!item || item.type !== 'empanada') return [];
+    const qty = Number(item.qty) || 1;
+    const subtotal = Number(item.subtotal) || 0;
+    if (item.desc === 'Unidad') {
+        const m = /\((.*)\)\s*$/.exec(item.title || '');
+        return [{ formato: 'Unidad', variedad: m ? m[1] : (item.title || ''), cantidad: qty, importe: subtotal }];
+    }
+    const formato = /docena/i.test(item.title || '') ? (/media/i.test(item.title) ? 'Media docena' : 'Docena') : (item.title || '');
+    // Ventas nuevas guardan el desglose con el precio unitario de cada variedad
+    if (Array.isArray(item.empBreakdown) && item.empBreakdown.length) {
+        return item.empBreakdown.map(b => ({
+            formato, variedad: b.name, cantidad: b.qty * qty, importe: Math.round(b.qty * b.unit * qty)
+        }));
+    }
+    // Ventas anteriores: el importe de la caja se reparte según la cantidad de cada variedad
+    const partes = (item.desc || '').split(' / ').map(p => /^(.*) x(\d+)$/.exec(p.trim())).filter(Boolean)
+        .map(m => ({ variedad: m[1], n: Number(m[2]) })).filter(p => p.n > 0);
+    const totalN = partes.reduce((s, p) => s + p.n, 0);
+    return partes.map(p => ({
+        formato, variedad: p.variedad, cantidad: p.n * qty, importe: totalN ? Math.round(subtotal * p.n / totalN) : 0
+    }));
+}
+
+function mostrarExportarEmpanadas() {
+    const hoy = new Date();
+    const ymd = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.9);z-index:5000;display:flex;align-items:center;justify-content:center;padding:20px;box-sizing:border-box;';
+    const box = document.createElement('div');
+    box.style.cssText = 'background:#1a1a1a;border-radius:12px;padding:24px;width:100%;max-width:380px;box-sizing:border-box;';
+    const inp = 'width:100%;padding:10px;background:#333;color:white;border:1px solid #555;border-radius:6px;font-size:14px;box-sizing:border-box;margin:4px 0 12px;';
+    box.innerHTML = `
+        <div style="font-size:18px;font-weight:bold;color:white;margin-bottom:14px;">📥 Exportar ventas de empanadas</div>
+        <label style="font-size:13px;color:#aaa;">Desde</label>
+        <input type="date" id="exp-desde" value="${ymd(hoy)}" style="${inp}">
+        <label style="font-size:13px;color:#aaa;">Hasta</label>
+        <input type="date" id="exp-hasta" value="${ymd(hoy)}" style="${inp}">
+        <label style="font-size:13px;color:#aaa;">Sucursal</label>
+        <select id="exp-branch" style="${inp}">
+            <option value="sucursal1,sucursal2">PLGALLO + POSADAS</option>
+            <option value="sucursal1">PLGALLO</option>
+            <option value="sucursal2">POSADAS</option>
+        </select>
+        <div style="display:flex;flex-direction:column;gap:10px;margin-top:6px;">
+            <button id="exp-ok" style="width:100%;padding:12px;background:var(--success);color:white;border:none;border-radius:8px;font-size:15px;font-weight:bold;cursor:pointer;">📥 Descargar Excel</button>
+            <button id="exp-cancel" style="width:100%;padding:12px;background:#555;color:white;border:none;border-radius:8px;font-size:15px;font-weight:bold;cursor:pointer;">Cancelar</button>
+        </div>`;
+    overlay.appendChild(box);
+    document.body.appendChild(overlay);
+    const cerrar = () => { if (overlay.parentNode) document.body.removeChild(overlay); };
+    box.querySelector('#exp-cancel').onclick = cerrar;
+    overlay.onclick = e => { if (e.target === overlay) cerrar(); };
+    box.querySelector('#exp-ok').onclick = async () => {
+        const desde = box.querySelector('#exp-desde').value;
+        const hasta = box.querySelector('#exp-hasta').value;
+        if (!desde || !hasta || desde > hasta) {
+            showToast('Revisá las fechas: "Desde" tiene que ser anterior o igual a "Hasta".', '#e74c3c');
+            return;
+        }
+        const branches = box.querySelector('#exp-branch').value.split(',');
+        cerrar();
+        await exportarEmpanadasExcel(desde, hasta, branches);
+    };
+}
+
+async function exportarEmpanadasExcel(desde, hasta, branches) {
+    const [y1, m1, d1] = desde.split('-').map(Number);
+    const [y2, m2, d2] = hasta.split('-').map(Number);
+    const startISO = new Date(y1, m1 - 1, d1).toISOString();
+    const endISO = new Date(y2, m2 - 1, d2 + 1).toISOString(); // hasta el final del día "Hasta"
+    showLoading('Preparando Excel...');
+    try {
+        const [XLSX, ...snaps] = await Promise.all([
+            loadXlsx(),
+            ...branches.map(b => firestore.collection('branches').doc(b).collection('sales')
+                .where('date', '>=', startISO).where('date', '<', endISO).get())
+        ]);
+        const detalle = [];
+        snaps.forEach((snap, i) => {
+            const suc = BRANCH_LABELS[branches[i]] || branches[i];
+            snap.docs.map(d => d.data())
+                .filter(s => s.status === 'completed')
+                .sort((a, b) => (a.date < b.date ? -1 : 1))
+                .forEach(s => {
+                    const f = new Date(s.date);
+                    (s.items || []).forEach(item => empanadaRowsFromItem(item).forEach(r => detalle.push({
+                        'Fecha': f.toLocaleDateString('es-AR'),
+                        'Hora': f.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false }),
+                        'Sucursal': suc,
+                        'Pedido': s.orderNumber || s.id || '',
+                        'Formato': r.formato,
+                        'Variedad': r.variedad,
+                        'Cantidad': r.cantidad,
+                        'Importe': r.importe,
+                        'Pago': s.paymentMethod || ''
+                    })));
+                });
+        });
+        if (detalle.length === 0) {
+            showDialog('Sin ventas', 'No hay ventas de empanadas en esas fechas.', [{text:'OK', action:closeDialog}]);
+            return;
+        }
+        // Resumen por sucursal y variedad
+        const resumenMap = {};
+        detalle.forEach(r => {
+            const k = r['Sucursal'] + '|' + r['Variedad'];
+            const x = resumenMap[k] || (resumenMap[k] = { 'Sucursal': r['Sucursal'], 'Variedad': r['Variedad'], 'Sueltas': 0, 'En media docena': 0, 'En docena': 0, 'Total empanadas': 0, 'Importe': 0 });
+            if (r['Formato'] === 'Unidad') x['Sueltas'] += r['Cantidad'];
+            else if (r['Formato'] === 'Media docena') x['En media docena'] += r['Cantidad'];
+            else x['En docena'] += r['Cantidad'];
+            x['Total empanadas'] += r['Cantidad'];
+            x['Importe'] += r['Importe'];
+        });
+        const resumen = Object.values(resumenMap).sort((a, b) => a['Sucursal'].localeCompare(b['Sucursal']) || b['Total empanadas'] - a['Total empanadas']);
+        resumen.push({
+            'Sucursal': 'TOTAL', 'Variedad': '',
+            'Sueltas': resumen.reduce((s, r) => s + r['Sueltas'], 0),
+            'En media docena': resumen.reduce((s, r) => s + r['En media docena'], 0),
+            'En docena': resumen.reduce((s, r) => s + r['En docena'], 0),
+            'Total empanadas': resumen.reduce((s, r) => s + r['Total empanadas'], 0),
+            'Importe': resumen.reduce((s, r) => s + r['Importe'], 0)
+        });
+        const wb = XLSX.utils.book_new();
+        const wsRes = XLSX.utils.json_to_sheet(resumen);
+        wsRes['!cols'] = [{ wch: 12 }, { wch: 18 }, { wch: 9 }, { wch: 15 }, { wch: 10 }, { wch: 15 }, { wch: 12 }];
+        const wsDet = XLSX.utils.json_to_sheet(detalle);
+        wsDet['!cols'] = [{ wch: 11 }, { wch: 7 }, { wch: 10 }, { wch: 12 }, { wch: 13 }, { wch: 18 }, { wch: 9 }, { wch: 10 }, { wch: 13 }];
+        XLSX.utils.book_append_sheet(wb, wsRes, 'Resumen');
+        XLSX.utils.book_append_sheet(wb, wsDet, 'Detalle');
+        const sucNombre = branches.map(b => BRANCH_LABELS[b] || b).join('-');
+        XLSX.writeFile(wb, `empanadas_${sucNombre}_${desde}${hasta !== desde ? '_a_' + hasta : ''}.xlsx`);
+        showToast(`✅ Excel descargado (${detalle.length} filas)`);
+    } catch (e) {
+        console.error('Error exportando empanadas:', e);
+        showDialog('Error', 'No se pudo generar el Excel. Revisá la conexión a internet e intentá de nuevo.', [{text:'OK', action:closeDialog}]);
+    } finally {
+        hideLoading();
+    }
+}
+
 async function mostrarResumenCaja() {
     if (userRole !== 'admin') {
         showDialog('Acceso restringido', 'Solo los administradores pueden ver el resumen de caja.', [{text:'OK', action:closeDialog}]);
@@ -5189,7 +5388,7 @@ async function mostrarResumenCaja() {
     });
 
     box.innerHTML = `
-        <div style="font-size:18px;font-weight:bold;color:white;margin-bottom:4px;">📊 Resumen de Caja</div>
+        <div style="font-size:18px;font-weight:bold;color:white;margin-bottom:4px;">📊 Resumen de Caja · 📍 ${BRANCH_LABELS[currentBranch] || currentBranch}</div>
         <div style="font-size:12px;color:#aaa;margin-bottom:14px;">${currentTurno ? 'Turno abierto desde ' + new Date(currentTurno.openedAt).toLocaleString('es-AR') : 'Sin turno activo'}</div>
 
         <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;">
@@ -5228,6 +5427,12 @@ async function mostrarResumenCaja() {
         } else {
             filterTurnoId = turnoFilter;
         }
+        // Turno elegido (para mostrar hora de apertura y cierre de caja)
+        const turnoSel = filterAllTurnos ? null
+            : (turnoFilter === 'turno-actual' ? currentTurno : turnosList.find(t => t.id === filterTurnoId)) || null;
+        const fmtFechaHora = iso => iso ? new Date(iso).toLocaleString('es-AR', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit', hour12:false }) : null;
+        const apertura = turnoSel ? fmtFechaHora(turnoSel.openedAt) : null;
+        const cierre = turnoSel ? (fmtFechaHora(turnoSel.closedAt) || 'turno abierto') : null;
 
         // Date filter
         const now = new Date();
@@ -5294,6 +5499,10 @@ async function mostrarResumenCaja() {
             : '<div style="color:#666;font-size:13px;">Sin movimientos</div>';
 
         box.querySelector('#res-body').innerHTML = `
+            ${turnoSel ? `<div style="background:#2a2a2a;border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:13px;">
+                <div style="display:flex;justify-content:space-between;margin-bottom:4px;"><span>🟢 Apertura de caja</span><span>${apertura}</span></div>
+                <div style="display:flex;justify-content:space-between;"><span>🔴 Cierre de caja</span><span>${cierre}</span></div>
+            </div>` : ''}
             <div style="background:#2a2a2a;border-radius:8px;padding:14px;margin-bottom:14px;">
                 <div style="font-size:13px;color:#aaa;margin-bottom:10px;">VENTAS (${ventasTurno.length} pedidos)</div>
                 <div style="display:flex;justify-content:space-between;margin-bottom:6px;"><span>💵 Efectivo</span><span>${formatMoney(totalEfectivo)}</span></div>
@@ -5323,7 +5532,7 @@ async function mostrarResumenCaja() {
             </div>`;
 
         // Store data for print
-        box._resumenData = { ventasTurno, totalEfectivo, totalTransferencia, totalTarjeta, totalVentas, movList, ingresos, egresos, totalEfectivoFinal };
+        box._resumenData = { apertura, cierre, ventasTurno, totalEfectivo, totalTransferencia, totalTarjeta, totalVentas, movList, ingresos, egresos, totalEfectivoFinal };
     }
 
     // Wire up filter changes
@@ -5349,7 +5558,10 @@ async function mostrarResumenCaja() {
                 @media print { @page { margin:0; size:80mm auto; } body { width:80mm; } }
             </style></head><body><div class="sec">
                 <div class="titulo">RESUMEN DE CAJA</div>
-                <div style="text-align:center;font-size:10px;margin-bottom:10px;">${fechaStr}</div>
+                <div style="text-align:center;font-size:14px;font-weight:bold;margin-bottom:6px;">SUCURSAL ${BRANCH_LABELS[currentBranch] || currentBranch}</div>
+                ${d.apertura ? `<div class="row"><span>Apertura de caja</span><span>${d.apertura}</span></div>
+                <div class="row"><span>Cierre de caja</span><span>${d.cierre}</span></div>` : ''}
+                <div style="text-align:center;font-size:10px;margin:6px 0 10px;">Impreso: ${fechaStr}</div>
                 <div class="subtitulo">VENTAS (${(d.ventasTurno||[]).length} pedidos)</div>
                 <div class="row"><span>Efectivo</span><span>${formatMoney(d.totalEfectivo||0)}</span></div>
                 <div class="row"><span>Transferencia</span><span>${formatMoney(d.totalTransferencia||0)}</span></div>
