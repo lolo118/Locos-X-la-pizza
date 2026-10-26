@@ -1,20 +1,8 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
+# Locos x la Pizza
 
-# Run and deploy your AI Studio app
+Punto de venta de Locos x la Pizza. Live: https://locosxlapizza.netlify.app
 
-This contains everything you need to run your app locally.
-
-View your app in AI Studio: https://ai.studio/apps/2486abe6-6371-419d-b45f-019f1f464d7f
-
-## Run Locally
-
-**Prerequisites:**  Node.js
-
-
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+- Toda la app vive en `index.html` (HTML + CSS + JS), en la raíz del repo.
+- Netlify corre `npm run build` (Vite) y publica `dist/`.
+- Los archivos estáticos que tienen que conservar su URL (`manifest.json`, `sw.js`, íconos) van en `public/`. Vite los copia tal cual a `dist/`.
+- Backend: Firebase (Firestore + Auth), SDK compat cargado desde gstatic.
