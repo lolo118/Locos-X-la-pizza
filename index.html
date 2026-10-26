@@ -904,6 +904,8 @@ let poolLastAttemptAt = 0;
 let poolLastError = null; // código del último error de reserva (se muestra junto al contador para diagnosticar)
 function refillOrderPool(force) {
     if (poolRefillPromise) return poolRefillPromise;
+    // Sin sesión las reglas rechazan la transacción (permission-denied): esperar al login.
+    if (!auth.currentUser) return Promise.resolve(false);
     // Sin red a nivel navegador no tiene sentido intentar (salvo forzado). Si el navegador dice
     // que hay red pero el latido de Firestore no, igual se intenta: la transacción falla sola.
     if (!connState.browserOnline && !force) return Promise.resolve(false);
