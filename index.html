@@ -3248,41 +3248,43 @@ function renderHistory() {
     }).join('');
 }
 
+// Helpers compartidos por reprintTicket, printTicket y el panel de Comandas
+// ── Nombre del tamaño para comanda ────────────────────────────
+function nombreTamano(title) {
+    const t = title.toLowerCase();
+    if (t === 'pizza entera' || t.includes('pizza entera')) return 'PIZZA ENTERA';
+    if (t === 'media pizza'  || t.includes('media pizza'))  return 'MEDIA PIZZA';
+    if (t === '2 porciones'  || t.includes('2 porciones'))  return '2 PORCIONES';
+    if (t.includes('porción individual') || t.includes('porcion individual')) return 'PORCIÓN';
+    if (t.includes('cuatro cuartos') || t.includes('36')) return 'GIGANTE (36p)';
+    if (t.includes('mitad')          || t.includes('18')) return 'MEDIO METRO (18p)';
+    if (t.includes('8 porciones')    || t.includes('8p')) return 'CHICA (8p)';
+    if (t.includes('4 porciones')    || t.includes('4p')) return 'INDIVIDUAL (4p)';
+    if (t.includes('keto'))                               return 'KETO';
+    return title.toUpperCase();
+}
+
+// ── Limpiar variedad para comanda ─────────────────────────────
+// Quita todas las especificaciones EXCEPTO (2 cuartos) que se muestra como (mitad)
+function limpiarVariedadComanda(b) {
+    let v = b.replace(/:[\s\S]*$/, '').trim(); // quitar precio
+    const esDobleCuarto = /\(2 cuartos\)/i.test(v);
+    v = v.replace(/\(2 cuartos\)/gi, '');
+    v = v.replace(/\(1 cuarto\)/gi, '');
+    v = v.replace(/\(cuarto\)/gi, '');
+    v = v.replace(/\(mitad \+ mitad\)/gi, '');
+    v = v.replace(/\(mitad\)/gi, '');
+    v = v.trim();
+    if (esDobleCuarto) v = v + ' (mitad)';
+    return v;
+}
+
 function reprintTicket(saleId) {
     const sale = sales.find(s => s.id === saleId);
     if (!sale) { showDialog('Error', 'No se encontró la venta.', [{text:'OK', action:closeDialog}]); return; }
 
     const date = new Date(sale.date).toLocaleString('es-AR');
     const fmt  = n => n ? n.toLocaleString('es-AR') : '0';
-
-    // ── Nombre del tamaño para comanda ────────────────────────────
-    function nombreTamano(title) {
-        const t = title.toLowerCase();
-        if (t === 'pizza entera' || t.includes('pizza entera')) return 'PIZZA ENTERA';
-        if (t === 'media pizza'  || t.includes('media pizza'))  return 'MEDIA PIZZA';
-        if (t === '2 porciones'  || t.includes('2 porciones'))  return '2 PORCIONES';
-        if (t.includes('porción individual') || t.includes('porcion individual')) return 'PORCIÓN';
-        if (t.includes('cuatro cuartos') || t.includes('36')) return 'GIGANTE (36p)';
-        if (t.includes('mitad')          || t.includes('18')) return 'MEDIO METRO (18p)';
-        if (t.includes('8 porciones')    || t.includes('8p')) return 'CHICA (8p)';
-        if (t.includes('4 porciones')    || t.includes('4p')) return 'INDIVIDUAL (4p)';
-        if (t.includes('keto'))                               return 'KETO';
-        return title.toUpperCase();
-    }
-
-    // ── Limpiar variedad para comanda ─────────────────────────────
-    function limpiarVariedadComanda(b) {
-        let v = b.replace(/:[\s\S]*$/, '').trim();
-        const esDobleCuarto = /\(2 cuartos\)/i.test(v);
-        v = v.replace(/\(2 cuartos\)/gi, '');
-        v = v.replace(/\(1 cuarto\)/gi, '');
-        v = v.replace(/\(cuarto\)/gi, '');
-        v = v.replace(/\(mitad \+ mitad\)/gi, '');
-        v = v.replace(/\(mitad\)/gi, '');
-        v = v.trim();
-        if (esDobleCuarto) v = v + ' (mitad)';
-        return v;
-    }
 
     // ── Info cliente (ticket) ─────────────────────────────────────
     let clienteHtml = '';
@@ -4653,36 +4655,6 @@ function printTicket() {
     const date = new Date(sale.date || Date.now()).toLocaleString('es-AR');
     const fmt  = n => n ? n.toLocaleString('es-AR') : '0';
 
-    // ── Nombre del tamaño para comanda ────────────────────────────
-    function nombreTamano(title) {
-        const t = title.toLowerCase();
-        if (t === 'pizza entera' || t.includes('pizza entera')) return 'PIZZA ENTERA';
-        if (t === 'media pizza'  || t.includes('media pizza'))  return 'MEDIA PIZZA';
-        if (t === '2 porciones'  || t.includes('2 porciones'))  return '2 PORCIONES';
-        if (t.includes('porción individual') || t.includes('porcion individual')) return 'PORCIÓN';
-        if (t.includes('cuatro cuartos') || t.includes('36')) return 'GIGANTE (36p)';
-        if (t.includes('mitad')          || t.includes('18')) return 'MEDIO METRO (18p)';
-        if (t.includes('8 porciones')    || t.includes('8p')) return 'CHICA (8p)';
-        if (t.includes('4 porciones')    || t.includes('4p')) return 'INDIVIDUAL (4p)';
-        if (t.includes('keto'))                               return 'KETO';
-        return title.toUpperCase();
-    }
-
-    // ── Limpiar variedad para comanda ─────────────────────────────
-    // Quita todas las especificaciones EXCEPTO (2 cuartos) que se muestra como (mitad)
-    function limpiarVariedadComanda(b) {
-        let v = b.replace(/:[\s\S]*$/, '').trim(); // quitar precio
-        const esDobleCuarto = /\(2 cuartos\)/i.test(v);
-        v = v.replace(/\(2 cuartos\)/gi, '');
-        v = v.replace(/\(1 cuarto\)/gi, '');
-        v = v.replace(/\(cuarto\)/gi, '');
-        v = v.replace(/\(mitad \+ mitad\)/gi, '');
-        v = v.replace(/\(mitad\)/gi, '');
-        v = v.trim();
-        if (esDobleCuarto) v = v + ' (mitad)';
-        return v;
-    }
-
     // ── Info cliente (ticket) ─────────────────────────────────────
     let clienteHtml = '';
     if (sale.orderType === 'delivery') {
@@ -4968,37 +4940,16 @@ function renderComandas() {
 
         // Generar items de comanda
         const itemsHtml = sale.items.map(item => {
-            function nombreTamano(title) {
-                const t = title.toLowerCase();
-                if (t === 'pizza entera' || t.includes('pizza entera')) return 'PIZZA ENTERA';
-                if (t === 'media pizza'  || t.includes('media pizza'))  return 'MEDIA PIZZA';
-                if (t === '2 porciones'  || t.includes('2 porciones'))  return '2 PORCIONES';
-                if (t.includes('porción individual') || t.includes('porcion individual')) return 'PORCIÓN';
-                if (t.includes('cuatro cuartos') || t.includes('36')) return 'GIGANTE (36p)';
-                if (t.includes('mitad')          || t.includes('18')) return 'MEDIO METRO (18p)';
-                if (t.includes('8 porciones')    || t.includes('8p')) return 'CHICA (8p)';
-                if (t.includes('4 porciones')    || t.includes('4p')) return 'INDIVIDUAL (4p)';
-                if (t.includes('keto'))                               return 'KETO';
-                return title.toUpperCase();
-            }
-            function limpiarVar(b) {
-                let v = b.replace(/:[\s\S]*$/, '').trim();
-                const esDoble = /\(2 cuartos\)/i.test(v);
-                v = v.replace(/\(2 cuartos\)|\(1 cuarto\)|\(cuarto\)|\(mitad \+ mitad\)|\(mitad\)/gi, '').trim();
-                if (esDoble) v += ' (mitad)';
-                return v;
-            }
-
             let lineas = '';
             if (item.type === 'pizza' || item.type === 'keto') {
                 const tamano = nombreTamano(item.title);
                 if (item.breakdown && item.breakdown.length > 1) {
-                    const vars = item.breakdown.map(b => limpiarVar(b));
+                    const vars = item.breakdown.map(b => limpiarVariedadComanda(b));
                     lineas = `<div class="cmd-tamano">${item.qty > 1 ? item.qty + 'x ' : ''}${tamano}</div>
                         ${vars.map(v => `<div class="cmd-variedad">- ${v}</div>`).join('')}`;
                 } else {
                     let variedad = item.breakdown && item.breakdown.length === 1
-                        ? limpiarVar(item.breakdown[0])
+                        ? limpiarVariedadComanda(item.breakdown[0])
                         : (item.desc && item.desc !== 'Unidad' ? item.desc.replace(/:[\s\S]*$/, '').trim() : tamano);
                     lineas = `<div class="cmd-tamano">${item.qty > 1 ? item.qty + 'x ' : ''}${tamano}</div>
                         <div class="cmd-variedad">- ${variedad}</div>`;
