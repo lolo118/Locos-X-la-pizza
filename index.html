@@ -1060,15 +1060,16 @@ const empanadaVarieties = {
 // Sucursales sin entrada acá usan el comportamiento completo por defecto.
 const branchConfig = {
     sucursal3: { // TRUCK
-        // Solo estas variedades de pizza están disponibles
+        // Variedades de pizza iniciales del truck. Las que se agregan o editan desde Productos
+        // quedan marcadas con `truck: true` y ya no dependen de esta lista (ver isBranchPizza).
         pizzaVarieties: ['Especial', 'Muzarella', 'Provolone', 'Calabresa'],
         // Tamaños "legacy" del truck (porción / 4 porciones). Ya no se usan en Caja porque
         // ahora se venden productos directos (ver directProducts), pero se conservan.
         pizzaSizes: ['p4'],
         // Solo permite estos métodos de compra
         orderTypes: ['mostrador'],
-        // Solo permite estas categorías de producto
-        categories: ['pizza'],
+        // Solo permite estas categorías de producto (los extras se cargan desde Productos)
+        categories: ['pizza', 'extras'],
         // Empanadas solo por unidad (no se ofrecen en Caja del truck, se conserva por compatibilidad)
         empanadaSizes: ['unidad'],
         // Permite registrar "Consumo propio" (pizzas para empleados / dueños) desde Caja, sin cobrar
@@ -1142,12 +1143,16 @@ function resumirConsumos(list) {
 }
 
 // Devuelve la lista de pizzas visibles para la sucursal actual (filtrada si corresponde)
+// ¿La variedad se vende en esta sucursal? En sucursales con lista de variedades (truck), sí si
+// fue agregada/editada desde Productos (truck: true) o si está en la lista inicial.
+function isBranchPizza(p, cfg) {
+    if (!cfg || !cfg.pizzaVarieties) return true;
+    return p.truck === true || (p.truck !== false && cfg.pizzaVarieties.includes(p.name));
+}
+
 function getVisiblePizzas() {
     const cfg = getBranchConfig();
-    if (cfg && cfg.pizzaVarieties) {
-        return db.pizzas.filter(p => cfg.pizzaVarieties.includes(p.name));
-    }
-    return db.pizzas;
+    return db.pizzas.filter(p => isBranchPizza(p, cfg));
 }
 
 // Devuelve el índice real en db.pizzas a partir de la variedad visible
@@ -1187,7 +1192,7 @@ function ensureProductDefaults(data) {
     const cfg = getBranchConfig();
     if (cfg && cfg.directProducts && Array.isArray(data.pizzas)) {
         data.pizzas.forEach(p => {
-            if (cfg.pizzaVarieties && !cfg.pizzaVarieties.includes(p.name)) return;
+            if (!isBranchPizza(p, cfg)) return;
             cfg.directProducts.forEach(dp => {
                 if (p[dp.field] == null || isNaN(p[dp.field]) || Number(p[dp.field]) <= 0) {
                     p[dp.field] = dp.defaultPrice;
@@ -1901,8 +1906,9 @@ function renderFlow() {
         if (cats.includes('pizza'))     catBtns.push(`<button class="btn btn-large" onclick="setCategory('pizza')">🍕 Pizza</button>`);
         if (cats.includes('keto'))      catBtns.push(`<button class="btn btn-large" onclick="setCategory('keto')">🥗 Pizza Keto</button>`);
         if (cats.includes('empanadas')) catBtns.push(`<button class="btn btn-large" onclick="setCategory('empanadas')">🥟 Empanadas</button>`);
-        if (cats.includes('extras') && (db.extras || []).length > 0) catBtns.push(`<button class="btn btn-large" onclick="setCategory('extras')">🌶️ Extras</button>`);
         }
+        // Extras: en todas las sucursales que los venden (también el truck), si hay alguno cargado
+        if (cats.includes('extras') && (db.extras || []).length > 0) catBtns.push(`<button class="btn btn-large" onclick="setCategory('extras')">🌶️ Extras</button>`);
         html = `
             <h2 class="step-title">1. ¿Qué vas a agregar?</h2>
             <div class="grid-buttons">
@@ -1990,8 +1996,9 @@ function renderFlow() {
         if (cats.includes('pizza'))     catBtns.push(`<button class="btn btn-large" onclick="setCategory('pizza')">🍕 Pizza</button>`);
         if (cats.includes('keto'))      catBtns.push(`<button class="btn btn-large" onclick="setCategory('keto')">🥗 Pizza Keto</button>`);
         if (cats.includes('empanadas')) catBtns.push(`<button class="btn btn-large" onclick="setCategory('empanadas')">🥟 Empanadas</button>`);
-        if (cats.includes('extras') && (db.extras || []).length > 0) catBtns.push(`<button class="btn btn-large" onclick="setCategory('extras')">🌶️ Extras</button>`);
         }
+        // Extras: en todas las sucursales que los venden (también el truck), si hay alguno cargado
+        if (cats.includes('extras') && (db.extras || []).length > 0) catBtns.push(`<button class="btn btn-large" onclick="setCategory('extras')">🌶️ Extras</button>`);
         html = `
             <button class="btn" style="margin-bottom:15px; width:fit-content" onclick="cancelOrder()">⬅ Cancelar pedido</button>
             <h2 class="step-title">¿Qué vas a agregar?</h2>
@@ -4267,20 +4274,24 @@ function renderProdPizzas() {
     if (cfg && cfg.pizzaVarieties && cfg.directProducts) {
         const dps = cfg.directProducts;
         const rows = prodDraft.pizzas.map((p, i) => {
-            if (!cfg.pizzaVarieties.includes(p.name)) return '';
+            if (!isBranchPizza(p, cfg)) return '';
+            // Marcarla como del truck: así sigue visible aunque se le cambie el nombre
+            p.truck = true;
             return `<tr>
-                <td style="color:white; font-size:14px;">${escAttr(p.name)}</td>
+                <td><input type="text" class="prod-input-text" value="${escAttr(p.name)}" placeholder="Nombre de la variedad" oninput="prodSetPizza(${i}, 'name', this.value)"></td>
                 ${dps.map(dp => `<td>${inp(directProductPrice(p, dp), `prodSetPizza(${i}, '${dp.field}', this.value)`)}</td>`).join('')}
+                <td style="text-align:center;"><button class="prod-del" title="Eliminar variedad" onclick="prodDeletePizza(${i})">🗑️</button></td>
             </tr>`;
         }).join('');
         panel.innerHTML = `
             <div class="prod-card">
                 <h3>🍕 Pizzas — ${BRANCH_LABELS[currentBranch]}</h3>
-                <p class="prod-hint">El truck vende <strong>${dps.map(dp => dp.title).join('</strong>, <strong>')}</strong>. Cada precio es por variedad; solo se muestran las variedades habilitadas para el truck.</p>
+                <p class="prod-hint">El truck vende <strong>${dps.map(dp => dp.title).join('</strong>, <strong>')}</strong>. Cada precio es por variedad. Cambiá nombres o precios, eliminá las que ya no se hacen y agregá nuevas con el botón de abajo.</p>
                 <div style="overflow-x:auto;"><table class="prod-table">
-                    <thead><tr><th>Variedad</th>${dps.map(dp => `<th>${dp.title}</th>`).join('')}</tr></thead>
-                    <tbody>${rows || `<tr><td colspan="${dps.length + 1}" class="prod-empty">No hay variedades habilitadas.</td></tr>`}</tbody>
+                    <thead><tr><th>Variedad</th>${dps.map(dp => `<th>${dp.title}</th>`).join('')}<th></th></tr></thead>
+                    <tbody>${rows || `<tr><td colspan="${dps.length + 2}" class="prod-empty">No hay variedades cargadas.</td></tr>`}</tbody>
                 </table></div>
+                <button class="prod-add" onclick="prodAddPizza()">➕ Nueva variedad de pizza</button>
             </div>`;
         return;
     }
@@ -4288,7 +4299,7 @@ function renderProdPizzas() {
     // Sucursal simplificada sin productos directos (legacy): precio por porción y 4 porciones
     if (cfg && cfg.pizzaVarieties) {
         const rows = prodDraft.pizzas.map((p, i) => {
-            if (!cfg.pizzaVarieties.includes(p.name)) return '';
+            if (!isBranchPizza(p, cfg)) return '';
             return `<tr>
                 <td style="color:white; font-size:14px;">${escAttr(p.name)}</td>
                 <td>${inp(p.porcion != null ? p.porcion : 4000, `prodSetPizza(${i}, 'porcion', this.value)`)}</td>
@@ -4346,7 +4357,14 @@ function prodSetPizza(i, field, value) {
 }
 
 function prodAddPizza() {
-    prodDraft.pizzas.push({ name: '', p4: 5000, p8: 9000, p18: 18000, p36: 29000 });
+    const nueva = { name: '', p4: 5000, p8: 9000, p18: 18000, p36: 29000 };
+    // Truck: queda habilitada para el truck, con los precios por defecto de sus productos directos
+    const cfg = getBranchConfig();
+    if (cfg && cfg.directProducts) {
+        nueva.truck = true;
+        cfg.directProducts.forEach(dp => { nueva[dp.field] = dp.defaultPrice; });
+    }
+    prodDraft.pizzas.push(nueva);
     markProdDirty();
     renderProdPizzas();
     focusLastProdInput('prod-panel-pizzas');
@@ -4505,11 +4523,12 @@ async function saveProductos() {
     const d = JSON.parse(JSON.stringify(prodDraft));
     const errores = [];
 
-    // Pizzas: nombre obligatorio y sin repetir
+    // Pizzas: nombre obligatorio y sin repetir (en el truck, solo entre las variedades que vende)
     d.pizzas = d.pizzas.map(p => ({ ...p, name: (p.name || '').trim() }));
-    const pizzasSinNombre = d.pizzas.filter(p => !p.name).length;
+    const pizzasSucursal = d.pizzas.filter(p => isBranchPizza(p, getBranchConfig()));
+    const pizzasSinNombre = pizzasSucursal.filter(p => !p.name).length;
     if (pizzasSinNombre) errores.push(`• ${pizzasSinNombre} variedad(es) de pizza sin nombre.`);
-    const nombresPizza = d.pizzas.map(p => p.name.toLowerCase());
+    const nombresPizza = pizzasSucursal.map(p => p.name.toLowerCase());
     const dupPizza = [...new Set(nombresPizza.filter((n, i) => n && nombresPizza.indexOf(n) !== i))];
     if (dupPizza.length) errores.push(`• Variedades de pizza repetidas: ${dupPizza.join(', ')}.`);
 
